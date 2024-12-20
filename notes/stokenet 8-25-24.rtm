@@ -1,0 +1,356 @@
+Minting owner badge
+Your resource was created! 🎉
+Transaction ID: txid_tdx_2_104fqrrnjp4kvet6d60e7udawcpvrm47mtskpn7ktyw3n66davgasxn4fhh
+Resource address: resource_tdx_2_1t44x9flkp8np5epw0x6jw9y29pesrpjzwenjsh59trrj6zn6k62tcz
+
+
+Your package was submitted! 🎉
+Transaction ID: txid_tdx_2_1320dn9drgj6pfe2t2ns24x9t6dnpudnt888g3fxaw4gtc4yjmjvstwtdlj
+Package address: package_tdx_2_1p477qhqccecgx58y3clf9r9m6v7qpj5w4j39zx9205pragcu5p024z
+
+# instantiate new raffle_manager component
+
+CALL_FUNCTION
+    Address("package_tdx_2_1p477qhqccecgx58y3clf9r9m6v7qpj5w4j39zx9205pragcu5p024z")
+    "Liquify"
+    "instantiate_liquify"
+;
+CALL_METHOD
+    Address("account_tdx_2_129z7yju29wkvgm5fmcuuvaeqmfh9cvnl78s6jxu4f5kgurykkwt8tx")
+    "deposit_batch"
+    Expression("ENTIRE_WORKTOP")
+;
+
+Your transaction was submitted! 🎉
+Tx ID
+txid_tdx_2_1ae5qkkzt7tq5jhc580ffkmnkjqa2athgpjkkmfyz04zdpj7497ks7mfax0
+
+// liquify component address
+component_tdx_2_1czaq4fav3t8kr95hsk2q7dmw6mmhz45m46rssgaf3d7dj08788sktk
+// liquify owner badge address
+resource_tdx_2_1tkgqn0hcncmjvysq9jqf8s6exsmdngqn5esuc2e02cktt7aw9y2ks3
+// buy order address
+resource_tdx_2_1ngztutdg86a77x7vh8pz0qrpql9hg9d507rjy4mznpl40s4fwc9rdf
+
+
+
+add_liquidity -> 1000 xrd at 0.1% discount
+
+CALL_METHOD
+    Address("account_tdx_2_129z7yju29wkvgm5fmcuuvaeqmfh9cvnl78s6jxu4f5kgurykkwt8tx")
+    "withdraw"
+    Address("resource_tdx_2_1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxtfd2jc") 
+    Decimal("1000") 
+;
+TAKE_ALL_FROM_WORKTOP
+    Address("resource_tdx_2_1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxtfd2jc")
+    Bucket("xrd_bucket")
+;
+CALL_METHOD
+    Address("component_tdx_2_1czaq4fav3t8kr95hsk2q7dmw6mmhz45m46rssgaf3d7dj08788sktk")
+    "add_liquidity"
+    Bucket("xrd_bucket")
+    Decimal("0.001")
+    true
+;
+CALL_METHOD
+    Address("account_tdx_2_129z7yju29wkvgm5fmcuuvaeqmfh9cvnl78s6jxu4f5kgurykkwt8tx")
+    "deposit_batch"
+    Expression("ENTIRE_WORKTOP")
+;
+
+Your transaction was submitted! 🎉
+Tx ID
+txid_tdx_2_1jr3vhhqfed9w549ndgjac0fqn69m773jd5y05nthunxj4479pnds6qmeq2
+
+
+add_liquidity -> 1000 xrd at .5% discount
+
+CALL_METHOD
+    Address("account_tdx_2_129z7yju29wkvgm5fmcuuvaeqmfh9cvnl78s6jxu4f5kgurykkwt8tx")
+    "withdraw"
+    Address("resource_tdx_2_1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxtfd2jc") 
+    Decimal("1000") 
+;
+TAKE_ALL_FROM_WORKTOP
+    Address("resource_tdx_2_1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxtfd2jc")
+    Bucket("xrd_bucket")
+;
+CALL_METHOD
+    Address("component_tdx_2_1czaq4fav3t8kr95hsk2q7dmw6mmhz45m46rssgaf3d7dj08788sktk")
+    "add_liquidity"
+    Bucket("xrd_bucket")
+    Decimal("0.005")
+    true
+;
+CALL_METHOD
+    Address("account_tdx_2_129z7yju29wkvgm5fmcuuvaeqmfh9cvnl78s6jxu4f5kgurykkwt8tx")
+    "deposit_batch"
+    Expression("ENTIRE_WORKTOP")
+;
+
+Your transaction was submitted! 🎉
+Tx ID
+txid_tdx_2_1fwsnhkdnlxsvnk807sscnl6me09dluefxhl6pvm6szl3tqlwxw3qfmuuy9
+
+add_liquidity -> 1000 xrd at 1% discount
+
+CALL_METHOD
+    Address("account_tdx_2_129z7yju29wkvgm5fmcuuvaeqmfh9cvnl78s6jxu4f5kgurykkwt8tx")
+    "withdraw"
+    Address("resource_tdx_2_1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxtfd2jc") 
+    Decimal("1000") 
+;
+TAKE_ALL_FROM_WORKTOP
+    Address("resource_tdx_2_1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxtfd2jc")
+    Bucket("xrd_bucket")
+;
+CALL_METHOD
+    Address("component_tdx_2_1czaq4fav3t8kr95hsk2q7dmw6mmhz45m46rssgaf3d7dj08788sktk")
+    "add_liquidity"
+    Bucket("xrd_bucket")
+    Decimal("0.01")
+    true
+;
+CALL_METHOD
+    Address("account_tdx_2_129z7yju29wkvgm5fmcuuvaeqmfh9cvnl78s6jxu4f5kgurykkwt8tx")
+    "deposit_batch"
+    Expression("ENTIRE_WORKTOP")
+;
+
+Your transaction was submitted! 🎉
+Tx ID
+txid_tdx_2_1clcj2z6gc6gc2sl52xkta4dwp7zen7ktuwxcu3ax6khkryg33hvsyqz02f
+
+
+
+market_sell => PUBLIC
+
+CALL_METHOD
+    Address("account_tdx_2_129z7yju29wkvgm5fmcuuvaeqmfh9cvnl78s6jxu4f5kgurykkwt8tx")
+    "withdraw"
+    Address("resource_tdx_2_1t5wwm4n6etcd6pxxfgnr5d0v9vd06qkruu74vx4tneu2jp7k27v3fm") 
+    Decimal("100") 
+;
+TAKE_ALL_FROM_WORKTOP
+    Address("resource_tdx_2_1t5wwm4n6etcd6pxxfgnr5d0v9vd06qkruu74vx4tneu2jp7k27v3fm")
+    Bucket("lsu_bucket")
+;
+CALL_METHOD
+    Address("component_tdx_2_1czaq4fav3t8kr95hsk2q7dmw6mmhz45m46rssgaf3d7dj08788sktk")
+    "market_sell"
+    Bucket("lsu_bucket")
+;
+CALL_METHOD
+    Address("account_tdx_2_129z7yju29wkvgm5fmcuuvaeqmfh9cvnl78s6jxu4f5kgurykkwt8tx")
+    "deposit_batch"
+    Expression("ENTIRE_WORKTOP")
+;
+
+
+collect fills from nft 1
+
+CALL_METHOD
+    Address("account_tdx_2_129z7yju29wkvgm5fmcuuvaeqmfh9cvnl78s6jxu4f5kgurykkwt8tx")
+    "withdraw_non_fungibles"
+    Address("resource_tdx_2_1ngztutdg86a77x7vh8pz0qrpql9hg9d507rjy4mznpl40s4fwc9rdf")
+    Array<NonFungibleLocalId>(
+        NonFungibleLocalId("#2#")
+    )
+;
+TAKE_ALL_FROM_WORKTOP
+    Address("resource_tdx_2_1ngztutdg86a77x7vh8pz0qrpql9hg9d507rjy4mznpl40s4fwc9rdf")
+    Bucket("buy_order_bucket")
+;
+CALL_METHOD
+    Address("component_tdx_2_1czaq4fav3t8kr95hsk2q7dmw6mmhz45m46rssgaf3d7dj08788sktk")
+    "collect_fills"
+    Bucket("buy_order_bucket")
+;
+CALL_METHOD
+    Address("account_tdx_2_129z7yju29wkvgm5fmcuuvaeqmfh9cvnl78s6jxu4f5kgurykkwt8tx")
+    "deposit_batch"
+    Expression("ENTIRE_WORKTOP")
+;
+
+
+
+
+
+
+remove_liquidity => PUBLIC
+
+CALL_METHOD
+    Address("account_tdx_2_129z7yju29wkvgm5fmcuuvaeqmfh9cvnl78s6jxu4f5kgurykkwt8tx")
+    "withdraw_non_fungibles"
+    Address("resource_tdx_2_1ngztutdg86a77x7vh8pz0qrpql9hg9d507rjy4mznpl40s4fwc9rdf")
+    Array<NonFungibleLocalId>(
+        NonFungibleLocalId("#4#")
+    )
+;
+TAKE_ALL_FROM_WORKTOP
+    Address("resource_tdx_2_1ngztutdg86a77x7vh8pz0qrpql9hg9d507rjy4mznpl40s4fwc9rdf")
+    Bucket("buy_order_bucket")
+;
+CALL_METHOD
+    Address("component_tdx_2_1czaq4fav3t8kr95hsk2q7dmw6mmhz45m46rssgaf3d7dj08788sktk")
+    "remove_liquidity"
+    Bucket("buy_order_bucket")
+;
+CALL_METHOD
+    Address("account_tdx_2_129z7yju29wkvgm5fmcuuvaeqmfh9cvnl78s6jxu4f5kgurykkwt8tx")
+    "deposit_batch"
+    Expression("ENTIRE_WORKTOP")
+;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+################################ FRONT END RTMS ################################
+
+add_liquidity => PUBLIC
+
+CALL_METHOD
+    # Selected account address from dropdown associated with persona
+    Address("account_tdx_2_129z7yju29wkvgm5fmcuuvaeqmfh9cvnl78s6jxu4f5kgurykkwt8tx")
+    "withdraw"
+    # Static address for XRD
+    Address("resource_tdx_2_1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxtfd2jc") 
+    # Connect this Decimal field to slider
+    Decimal("1000") 
+;
+TAKE_ALL_FROM_WORKTOP
+    # Static XRD Address
+    Address("resource_tdx_2_1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxtfd2jc")
+    Bucket("xrd_bucket")
+;
+CALL_METHOD
+    # Static Liquify component address
+    Address("component_tdx_2_1czaq4fav3t8kr95hsk2q7dmw6mmhz45m46rssgaf3d7dj08788sktk")
+    "add_liquidity"
+    Bucket("xrd_bucket")
+    # Connect this decimal to discount % slider
+    Decimal("0.01")
+    true
+;
+CALL_METHOD
+    # Selected account address from dropdown associated with persona
+    Address("account_tdx_2_129z7yju29wkvgm5fmcuuvaeqmfh9cvnl78s6jxu4f5kgurykkwt8tx")
+    "deposit_batch"
+    Expression("ENTIRE_WORKTOP")
+;
+
+remove_liquidity => PUBLIC
+
+CALL_METHOD
+    # Selected account address from dropdown associated with persona
+    Address("account_tdx_2_129z7yju29wkvgm5fmcuuvaeqmfh9cvnl78s6jxu4f5kgurykkwt8tx")
+    "withdraw_non_fungibles"
+    # Static address for buy_order NFT
+    Address("resource_tdx_2_1ngztutdg86a77x7vh8pz0qrpql9hg9d507rjy4mznpl40s4fwc9rdf")
+    # Connect this NFT ID selection a button in the "Your Orders" section
+    Array<NonFungibleLocalId>(
+        NonFungibleLocalId("#1#")
+    )
+;
+TAKE_ALL_FROM_WORKTOP
+    # Static address for buy_order NFT
+    Address("resource_tdx_2_1ngztutdg86a77x7vh8pz0qrpql9hg9d507rjy4mznpl40s4fwc9rdf")
+    Bucket("buy_order_bucket")
+;
+CALL_METHOD
+    # Static Liquify component address
+    Address("component_tdx_2_1czaq4fav3t8kr95hsk2q7dmw6mmhz45m46rssgaf3d7dj08788sktk")
+    "remove_liquidity"
+    Bucket("buy_order_bucket")
+;
+CALL_METHOD
+    # Selected account address from dropdown associated with persona
+    Address("account_tdx_2_129z7yju29wkvgm5fmcuuvaeqmfh9cvnl78s6jxu4f5kgurykkwt8tx")
+    "deposit_batch"
+    Expression("ENTIRE_WORKTOP")
+;
+
+market_sell => PUBLIC
+
+CALL_METHOD
+    # Selected account address from dropdown associated with persona
+    Address("account_tdx_2_129z7yju29wkvgm5fmcuuvaeqmfh9cvnl78s6jxu4f5kgurykkwt8tx")
+    "withdraw"
+    # Connect this to dropdown selection of LSUs owned by selected account
+    Address("resource_tdx_2_1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxtfd2jc") 
+    # Connect this Decimal field to slider to select amount of LSUs to sell
+    Decimal("100") 
+;
+TAKE_ALL_FROM_WORKTOP
+    # Match the address being withdrawn above
+    Address("resource_tdx_2_1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxtfd2jc")
+    Bucket("lsu_bucket")
+;
+CALL_METHOD
+    # Static Liquify component address
+    Address("component_tdx_2_1czaq4fav3t8kr95hsk2q7dmw6mmhz45m46rssgaf3d7dj08788sktk")
+    "market_sell"
+    Bucket("lsu_bucket")
+;
+CALL_METHOD
+    # Selected account address from dropdown associated with persona
+    Address("account_tdx_2_129z7yju29wkvgm5fmcuuvaeqmfh9cvnl78s6jxu4f5kgurykkwt8tx")
+    "deposit_batch"
+    Expression("ENTIRE_WORKTOP")
+;
+
+collect_fills => PUBLIC to be used with "Collect Fills" button in "Your Orders" section
+
+CALL_METHOD
+    # Selected account address from dropdown associated with persona
+    Address("account_tdx_2_129z7yju29wkvgm5fmcuuvaeqmfh9cvnl78s6jxu4f5kgurykkwt8tx")
+    "withdraw_non_fungibles"
+    # Static address for buy_order NFT
+    Address("resource_tdx_2_1nf0nlf9upwf7d429u962qa6w9kstx8fa0qyw7j7vmthnvzqpw6kqcw")
+    # Connect this NFT ID selection a button in the "Your Orders" section
+    Array<NonFungibleLocalId>(
+        NonFungibleLocalId("#1#")
+    )
+;
+TAKE_ALL_FROM_WORKTOP
+    # Static address for buy_order NFT
+    Address("resource_tdx_2_1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxtfd2jc")
+    Bucket("buy_order_bucket")
+;
+CALL_METHOD
+    # Static Liquify component address
+    Address("component_tdx_2_1czaq4fav3t8kr95hsk2q7dmw6mmhz45m46rssgaf3d7dj08788sktk")
+    "collect_fills"
+    Bucket("buy_order_bucket")
+;
+CALL_METHOD
+    # Selected account address from dropdown associated with persona
+    Address("account_tdx_2_129z7yju29wkvgm5fmcuuvaeqmfh9cvnl78s6jxu4f5kgurykkwt8tx")
+    "deposit_batch"
+    Expression("ENTIRE_WORKTOP")
+;
