@@ -20,7 +20,7 @@ pub struct TestEnvironment {
     package_address: PackageAddress,
     liquify_component: ComponentAddress,
     owner_badge: ResourceAddress,
-    buy_order: ResourceAddress,
+    liquidity_receipt: ResourceAddress,
 
     lsu_resource_address: ResourceAddress,
 }
@@ -81,7 +81,7 @@ impl TestEnvironment {
 
         let liquify_component = receipt.expect_commit(true).new_component_addresses()[0];
         let owner_badge = receipt.expect_commit(true).new_resource_addresses()[0];
-        let buy_order = receipt.expect_commit(true).new_resource_addresses()[1];
+        let liquidity_receipt = receipt.expect_commit(true).new_resource_addresses()[1];
 
         // *********** User 1 stakes 1000 XRD to validator to receive LSUs ***********
 
@@ -247,7 +247,7 @@ impl TestEnvironment {
             package_address,
             liquify_component,
             owner_badge,
-            buy_order,
+            liquidity_receipt,
             lsu_resource_address,
         }
     }
@@ -288,7 +288,7 @@ fn instantiate_test2() {
     let package_address = ledger.package_address;
     let liquify_component = ledger.liquify_component;
     let owner_badge = ledger.owner_badge;
-    let buy_order = ledger.buy_order;
+    let liquidity_receipt = ledger.liquidity_receipt;
     let lsu_resource_address = ledger.lsu_resource_address;
 
     // *********** User 1 sells all LSUs at market rate LSUs ***********
@@ -326,14 +326,14 @@ fn instantiate_test2() {
     //     .lock_fee_from_faucet()
     //     .withdraw_from_account(
     //         user_account4, 
-    //         buy_order, 
+    //         liquidity_receipt, 
     //         // account1_lsu_balance
     //         dec!(1)
     //     )
-    //     .take_all_from_worktop(buy_order, "buy_order_bucket")
+    //     .take_all_from_worktop(liquidity_receipt, "liquidity_receipt_bucket")
         
     //     .call_method_with_name_lookup(liquify_component, "collect_fills", |lookup| {
-    //         (lookup.bucket("buy_order_bucket"),)
+    //         (lookup.bucket("liquidity_receipt_bucket"),)
     //     })
     //     .call_method(
     //         user_account4,
@@ -408,14 +408,14 @@ fn instantiate_test2() {
     //     .lock_fee_from_faucet()
     //     .withdraw_from_account(
     //         user_account5, 
-    //         buy_order, 
+    //         liquidity_receipt, 
     //         // account1_lsu_balance
     //         dec!(1)
     //     )
-    //     .take_all_from_worktop(buy_order, "buy_order_bucket")
+    //     .take_all_from_worktop(liquidity_receipt, "liquidity_receipt_bucket")
         
     //     .call_method_with_name_lookup(liquify_component, "collect_fills", |lookup| {
-    //         (lookup.bucket("buy_order_bucket"),)
+    //         (lookup.bucket("liquidity_receipt_bucket"),)
     //     })
     //     .call_method(
     //         user_account5,
@@ -436,14 +436,14 @@ fn instantiate_test2() {
     //     .lock_fee_from_faucet()
     //     .withdraw_from_account(
     //         user_account6, 
-    //         buy_order, 
+    //         liquidity_receipt, 
     //         // account1_lsu_balance
     //         dec!(1)
     //     )
-    //     .take_all_from_worktop(buy_order, "buy_order_bucket")
+    //     .take_all_from_worktop(liquidity_receipt, "liquidity_receipt_bucket")
         
     //     .call_method_with_name_lookup(liquify_component, "collect_fills", |lookup| {
-    //         (lookup.bucket("buy_order_bucket"),)
+    //         (lookup.bucket("liquidity_receipt_bucket"),)
     //     })
     //     .call_method(
     //         user_account6,

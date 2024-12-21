@@ -87,16 +87,16 @@ mod liquify_module {
     struct Liquify {
 
         liquify_owner_badge: ResourceAddress,
-        xrd_liquidity: Vault,
+        xrd_liquidity: Vault, // holds all XRD liquidity
         liquidity_receipt: ResourceManager,
         liquidity_receipt_counter: u64,
-        max_fills_to_collect: u64,
-        buy_list: AvlTree<u128, NonFungibleGlobalId>,
-        order_fill_tree: AvlTree<u128, UnstakeNFTOrLSU>, 
-        component_vaults: KeyValueStore<ResourceAddress, Vault>,
+        max_fills_to_collect: u64, // Maximum number of fills to collect in a single transaction
+        buy_list: AvlTree<u128, NonFungibleGlobalId>, // Data structure for all liquidity receipts
+        order_fill_tree: AvlTree<u128, UnstakeNFTOrLSU>,  // Data structure for all fills to collect
+        component_vaults: KeyValueStore<ResourceAddress, Vault>, // Vaults that store all LSUs and unstake nfts for users
         total_xrd_volume: Decimal,
         total_xrd_locked: Decimal,
-        component_status: bool,  // 1 = active, accepting liquidity _ = inactive, not accepting new liquidity
+        component_status: bool,  // true = active, accepting liquidity false = inactive, not accepting new liquidity
         order_fill_counter: u64,  // Globally increasing counter for order fills
         liquidity_index: Vec<Decimal>,  // Index of total liquidity at each discount level
         discounts: Vec<Decimal>,  // List of discounts available
@@ -220,6 +220,23 @@ mod liquify_module {
             (liquify_component, liquify_owner_badge)
         }
 
+        /// Allows user to deposit XRD liquidity with specified parameters.
+        /// 
+        /// This method takes a bucket of XRD, a discount of type Decimal that indicates the percentage amount under
+        /// the redemption value of an amount of LSUs that a liquidity provider is willing to purchase any LSU, and
+        /// a boolean that indicates whether the user wants to automatically unstake any LSUs that are collected.  This
+        /// method is contrained by the `minimum_liquidity` variable.  The user must pass in an amount of XRD that is greater
+        /// than or equal to the `minimum_liquidity` which is set to 10,000 XRD by default.  This can be adjusted by the owner
+        /// of the component in order to maintain an efficient unstaking process.  The higher the minimum, the more liquidity
+        /// can be processed in a single transaction.
+        /// 
+        /// # Arguments
+        /// * `xrd_bucket`: A `Bucket` containing XRD to be deposited as liquidity.
+        /// * `discount`: A `Decimal` representing the discount percentage the user is willing to use liquidity provided
+        /// * `auto_unstake`: A `bool` indicating whether the user wants to automatically unstake any LSUs that are collected.
+        ///
+        /// # Returns
+        /// * A `Bucket` containing the new liquidity receipt NFT that have been minted to track the liquidity.
         pub fn add_liquidity(&mut self, xrd_bucket: Bucket, discount: Decimal, auto_unstake: bool) -> Bucket {
             
             // ensure component is active and user is passing in a large enough amount of XRD
@@ -283,6 +300,17 @@ mod liquify_module {
             new_liquidity_receipt
         }
         
+        /// Allows user to withdraw XRD liquidity using a bucket containing liquidity receipt NFTs.
+        /// 
+        /// This method takes a bucket of liquidity receipt NFTs and returns the XRD that was deposited in the liquidity pool. This method
+        /// is constrained by the `max_fills_to_collect` variable.  Currently this variable is set to 85.  More than 85 fills surpasses the
+        /// costing limits of a single transaction.
+        /// 
+        /// # Arguments
+        /// * `liquidity_receipt_bucket`: A `Bucket` containing the liquidity receipt NFTs representing liquidity to remove.
+        ///
+        /// # Returns
+        /// * A `Bucket` containing remaining XRD that was deposited in the liquidity pool.
         pub fn remove_liquidity(&mut self, liquidity_receipt_bucket: Bucket) -> (Bucket, Bucket) {
 
             // Ensure the bucket contains the buy order NFT
@@ -300,7 +328,8 @@ mod liquify_module {
         
             // Iterate over the non-fungible IDs in the liquidity_receipt_bucket
             for local_id in liquidity_receipt_bucket.as_non_fungible().non_fungible_local_ids() {
-                // Retrieve buy order data
+
+                // Retrieve liquidity receipt data
                 let data: LiquidityDetails = self.liquidity_receipt.get_non_fungible_data(&local_id);
 
                 // Ensure the LiquidityStatus is Open
@@ -352,6 +381,20 @@ mod liquify_module {
             (user_funds, liquidity_receipt_bucket)
         }
 
+        /// Allows users to get an amount of XRD for a given amount of LSUs.
+        /// 
+        /// Executes the process of iterating through all available liquidity to get the most amount of XRD for a given 
+        /// amount of LSUs. It takes all liquidity in order regardless of size of liquidity remaining in the liquidity receipt.
+        /// This method is constrained by the `max_liquidity_iter` variable.  When calling the component directly, this method
+        /// can handle up to 29 iterations.  If called through the interface component, it can handle up to 28 iterations
+        /// 
+        /// # Arguments
+        /// * `lsu_bucket`: A `Bucket` containing LSUs to be "unstaked" for XRD.
+        ///
+        /// # Returns
+        /// * A `Bucket` containing remaining XRD that was deposited in the liquidity pool.
+        /// * A `Bucket` containing any remaining LSUs that were not "unstaked" in case the transaction either hits an iteration
+        /// limit or the liquidity pool is empty.
         pub fn liquify_unstake(&mut self, mut lsu_bucket: Bucket) -> (Bucket, Bucket) {
 
             // Ensure the bucket contains a valid LSU
@@ -506,7 +549,19 @@ mod liquify_module {
             (xrd_bucket, lsu_bucket)
         }
 
-        // User can pass in a specific selection of keys from the AvlTree to use directly
+        /// Allows users to get an amount of XRD for a given amount of LSUs.
+        /// 
+        /// Executes the process of iterating through specified liquidity receipts to "unstake" a bucket of LSUs. 
+        /// This method is constrained by the `max_liquidity_iter` variable.  When calling the component directly, this method
+        /// can handle up to 29 liquidity receipts.  If called through the interface component, it can handle up to 28 receipts.
+        /// 
+        /// # Arguments
+        /// * `lsu_bucket`: A `Bucket` containing LSUs to be "unstaked" for XRD.
+        ///
+        /// # Returns
+        /// * A `Bucket` containing remaining XRD that was deposited in the liquidity pool.
+        /// * A `Bucket` containing any remaining LSUs that were not "unstaked" in case the transaction either hits an iteration
+        /// limit or the liquidity pool is empty.
         pub fn liquify_unstake_off_ledger(&mut self, mut lsu_bucket: Bucket, order_keys: Vec<u128>) -> (Bucket, Bucket) {
 
             // Ensure the bucket contains a valid LSU
@@ -553,7 +608,9 @@ mod liquify_module {
                     //     "Partially filling buy order with key: {}.  This cooresponds to a discount of {} and an order id of {}. Taking {} LSUs to fulfill {} XRD.",
                     //     avl_key, discount, local_id, lsu_amount_to_take, fill_amount
                     // );
+
                 } else {
+
                     // take LSU amount proportional to the remaining XRD in buy order
                     let max_xrd_for_lsu = redemption_value * (1 - discount);
                     lsu_amount_to_take = lsu_bucket.amount() * (xrd_remaining / max_xrd_for_lsu);
@@ -609,7 +666,6 @@ mod liquify_module {
                 let fill_percent: Decimal = (dec!(1) - (new_remaining / data.total_xrd_amount)) * dec!(100);
                 self.liquidity_receipt.update_non_fungible_data(&local_id, "fill_percent", fill_percent);
                 
-            
                 self.liquidity_receipt.update_non_fungible_data(&local_id, "xrd_remaining", new_remaining);
                 let mut new_fills_to_collect = data.fills_to_collect;
                 new_fills_to_collect += 1;
@@ -619,6 +675,7 @@ mod liquify_module {
                 self.order_fill_counter += 1;
                 
                 if data.auto_unstake {
+
                     let unstake_nft = validator.unstake(lsu_taken);
                     let unstake_nft_data = UnstakeNFTOrLSU::UnstakeNFT(UnstakeNFTData {
                         resource_address: unstake_nft.resource_address(),
@@ -627,7 +684,9 @@ mod liquify_module {
                     self.order_fill_tree.insert(order_fill_key, unstake_nft_data.clone());
                     self.ensure_user_vault_exists(unstake_nft.resource_address());
                     self.component_vaults.get_mut(&unstake_nft.resource_address()).unwrap().put(unstake_nft);
+
                 } else {
+
                     let lsu_data = UnstakeNFTOrLSU::LSU(LSUData {
                         resource_address: lsu_taken.resource_address(),
                         amount: lsu_taken.amount(),
@@ -656,6 +715,19 @@ mod liquify_module {
             (xrd_bucket, lsu_bucket)
         }
 
+        /// Allows user to collect fills from liquidity receipt NFTs that have been used in the "unstake" process.
+        /// 
+        /// This method takes a bucket of liquidity receipt NFTs and returns either LSUs or stake claim NFTs depending
+        /// on whether or not the auto unstake feature was selected for the liquidity receipt. This method
+        /// is constrained by the `max_fills_to_collect` variable.  Currently this variable is set to 85.  More than 85 fills surpasses the
+        /// costing limits of a single transaction.
+        /// 
+        /// # Arguments
+        /// * `liquidity_receipt_bucket`: A `Bucket` containing the liquidity receipt NFTs representing liquidity to remove.
+        ///
+        /// # Returns
+        /// * A `Vec<Bucket>` containing LSUs or stake claim NFTs from the unstaking process.
+        /// * A `Bucket` containing the original liquidity receipt NFTs with updated data.
         pub fn collect_fills(&mut self, liquidity_receipt_bucket: Bucket) -> (Vec<Bucket>, Bucket) {
             
             // Ensure bucket contains a real liquidity receipt
@@ -684,13 +756,6 @@ mod liquify_module {
                     NonFungibleLocalId::Integer(i) => i.value(),
                     _ => 0,
                 };
-        
-                // Calculate how many fills can be collected for this order without exceeding the max
-                // let fills_to_collect = if data.fills_to_collect + collect_counter <= self.max_fills_to_collect {
-                //     data.fills_to_collect
-                // } else {
-                //     self.max_fills_to_collect - collect_counter
-                // };
         
                 // Calculate the start and end keys directly based on the order ID
                 let start_key = CombinedKey::new(order_id_u64, 1).key;
@@ -757,36 +822,8 @@ mod liquify_module {
             // Return the collected fills and the original buy order bucket
             (bucket_vec, liquidity_receipt_bucket)
         }
+
         
-        pub fn collect_platform_fees(&mut self) -> Bucket {
-            self.fee_vault.take_all()
-        }
-        
-        pub fn set_component_status(&mut self, status: bool) {
-            self.component_status = status;
-            // info!("Component status set to: {}", status);
-        }
-
-        pub fn set_platform_fee(&mut self, fee: Decimal) {
-            self.platform_fee = fee;
-        }
-
-        pub fn set_max_liquidity_iter(&mut self, max: u64) {
-            self.max_liquidity_iter = max;
-        }
-
-        // Method to set hard limit of iterations for both unstaking methods
-        // Limit currently at 29 iterations
-        pub fn set_max_fills_to_collect(&mut self, max: u64) {
-            self.max_fills_to_collect = max;
-        }
-
-        // Method to set the minimum liquidity required to deposit on the platform
-        // Higher limits lead to more efficient unstaking
-        pub fn set_minimum_liquidity(&mut self, min: Decimal) {
-            self.minimum_liquidity = min;
-        }
-
         pub fn burn_closed_receipts(&mut self, receipts: Bucket) {
 
             // Ensure the bucket contains a liquidity receipt
@@ -803,7 +840,96 @@ mod liquify_module {
             }
 
             receipts.burn();
-        } 
+        }
+        
+        /// Allows protocol owner to collect any fees that have been generated by the platform.
+        /// 
+        /// # Requires
+        /// * Proof of owner badge
+        /// 
+        /// # Arguments
+        /// * None
+        ///
+        /// # Returns
+        /// * A `Bucket` containing all available XRD from component vault.
+        pub fn collect_platform_fees(&mut self) -> Bucket {
+            self.fee_vault.take_all()
+        }
+        
+        /// Allows protocol owner to collect any fees that have been generated by the platform.
+        /// 
+        /// # Requires
+        /// * Proof of owner badge
+        /// 
+        /// # Arguments
+        /// * 'bool' - A boolean value to set the status of the component: true for active, false for inactive.
+        ///
+        /// # Returns
+        /// * None
+        pub fn set_component_status(&mut self, status: bool) {
+            self.component_status = status;
+            // info!("Component status set to: {}", status);
+        }
+
+        /// Allows protocol owner to collect any fees that have been generated by the platform.
+        /// 
+        /// # Requires
+        /// * Proof of owner badge
+        /// 
+        /// # Arguments
+        /// * 'bool' - A boolean value to set the status of the component: true for active, false for inactive.
+        ///
+        /// # Returns
+        /// * None
+        pub fn set_platform_fee(&mut self, fee: Decimal) {
+            self.platform_fee = fee;
+        }
+
+        /// Allows protocol owner to set the maximum number of liquidity receipts that can be processed in a single transaction.
+        /// Current logic allows for up to 29 receipts to be processed in a single transaction directly or 28 through the interface.
+        /// 
+        /// # Requires
+        /// * Proof of owner badge
+        /// 
+        /// # Arguments
+        /// * 'u64' - An integer number of receipts to process in a single transaction.
+        ///
+        /// # Returns
+        /// * None
+        pub fn set_max_liquidity_iter(&mut self, max: u64) {
+            self.max_liquidity_iter = max;
+        }
+
+        /// Allows protocol owner to set the maximum number of fills that can be processed in a single transaction.
+        /// Current logic allows for up to 85 fills to be collected in a single transaction.
+        /// 
+        /// # Requires
+        /// * Proof of owner badge
+        /// 
+        /// # Arguments
+        /// * 'u64' - An integer number of fills to collect in a single transaction.
+        ///
+        /// # Returns
+        /// * None
+        pub fn set_max_fills_to_collect(&mut self, max: u64) {
+            self.max_fills_to_collect = max;
+        }
+
+        /// Allows protocol owner to set the minimum deposit amount for liquidity.  The higher the minimum, the larger
+        /// the amount of liquidity is that can be processed in a single transaction.
+        /// 
+        /// # Requires
+        /// * Proof of owner badge
+        /// 
+        /// # Arguments
+        /// * 'Decimal' - mimimum liquidity of XRD for depositing into the liquidity pool.
+        ///
+        /// # Returns
+        /// * None
+        pub fn set_minimum_liquidity(&mut self, min: Decimal) {
+            self.minimum_liquidity = min;
+        }
+ 
 
         fn ensure_user_vault_exists(&mut self, resource: ResourceAddress) {
 

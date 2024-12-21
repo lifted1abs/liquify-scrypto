@@ -19,7 +19,7 @@ pub struct TestEnvironment {
     package_address: PackageAddress,
     liquify_component: ComponentAddress,
     owner_badge: ResourceAddress,
-    buy_order: ResourceAddress,
+    liquidity_receipt: ResourceAddress,
     lsu_resource_address: ResourceAddress,
     
 }
@@ -80,7 +80,7 @@ impl TestEnvironment {
 
         let liquify_component = receipt.expect_commit(true).new_component_addresses()[0];
         let owner_badge = receipt.expect_commit(true).new_resource_addresses()[0];
-        let buy_order = receipt.expect_commit(true).new_resource_addresses()[1];
+        let liquidity_receipt = receipt.expect_commit(true).new_resource_addresses()[1];
 
         // *********** User 1 stakes 1000 XRD to validator to receive LSUs ***********
 
@@ -226,7 +226,7 @@ impl TestEnvironment {
             package_address,
             liquify_component,
             owner_badge,
-            buy_order,
+            liquidity_receipt,
             lsu_resource_address,
         }
     }
@@ -270,7 +270,7 @@ fn instantiate_test2() {
     let package_address = ledger.package_address;
     let liquify_component = ledger.liquify_component;
     let owner_badge = ledger.owner_badge;
-    let buy_order = ledger.buy_order;
+    let liquidity_receipt = ledger.liquidity_receipt;
     let lsu_resource_address = ledger.lsu_resource_address;
 
     let off_ledger_order_vec: Vec<u128> = vec![

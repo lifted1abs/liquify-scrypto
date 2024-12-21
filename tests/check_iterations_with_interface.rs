@@ -20,7 +20,7 @@ pub struct TestEnvironment {
     liquify_component: ComponentAddress,
     liquify_interface_component: ComponentAddress,
     owner_badge: ResourceAddress,
-    buy_order: ResourceAddress,
+    liquidity_receipt: ResourceAddress,
 
     lsu_resource_address: ResourceAddress,
 }
@@ -101,7 +101,7 @@ impl TestEnvironment {
 
         let liquify_component = receipt.expect_commit(true).new_component_addresses()[0];
         let owner_badge = receipt.expect_commit(true).new_resource_addresses()[0];
-        let buy_order = receipt.expect_commit(true).new_resource_addresses()[1];
+        let liquidity_receipt = receipt.expect_commit(true).new_resource_addresses()[1];
 
         // *********** Set interface target ***********
 
@@ -902,7 +902,7 @@ impl TestEnvironment {
             liquify_component,
             liquify_interface_component: interface_component,
             owner_badge,
-            buy_order,
+            liquidity_receipt,
             lsu_resource_address,
         }
     }
@@ -947,7 +947,7 @@ fn instantiate_test2() {
     let liquify_component = ledger.liquify_component;
     let liquify_interface_component = ledger.liquify_interface_component;
     let owner_badge = ledger.owner_badge;
-    let buy_order = ledger.buy_order;
+    let liquidity_receipt = ledger.liquidity_receipt;
     let lsu_resource_address = ledger.lsu_resource_address;
 
     // *********** User 1 sells all LSUs at market rate LSUs ***********

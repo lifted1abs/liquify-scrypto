@@ -163,12 +163,12 @@ CALL_METHOD
 ;
 TAKE_ALL_FROM_WORKTOP
     Address("resource_tdx_2_1nfwuan2gh5xel94wsfrsumfh4egrjqglh8vuu5xfd286s7ehh27z3v")
-    Bucket("buy_order_bucket")
+    Bucket("liquidity_receipt_bucket")
 ;
 CALL_METHOD
     Address("component_tdx_2_1crjwphalz3j3rvaftxm0yq77u3xkrfn3wcgs90r28jern2qrqc8v53")
     "collect_fills"
-    Bucket("buy_order_bucket")
+    Bucket("liquidity_receipt_bucket")
 ;
 CALL_METHOD
     Address("account_tdx_2_129z7yju29wkvgm5fmcuuvaeqmfh9cvnl78s6jxu4f5kgurykkwt8tx")
@@ -194,12 +194,12 @@ CALL_METHOD
 ;
 TAKE_ALL_FROM_WORKTOP
     Address("resource_tdx_2_1nfwuan2gh5xel94wsfrsumfh4egrjqglh8vuu5xfd286s7ehh27z3v")
-    Bucket("buy_order_bucket")
+    Bucket("liquidity_receipt_bucket")
 ;
 CALL_METHOD
     Address("component_tdx_2_1crjwphalz3j3rvaftxm0yq77u3xkrfn3wcgs90r28jern2qrqc8v53")
     "remove_liquidity"
-    Bucket("buy_order_bucket")
+    Bucket("liquidity_receipt_bucket")
 ;
 CALL_METHOD
     Address("account_tdx_2_129z7yju29wkvgm5fmcuuvaeqmfh9cvnl78s6jxu4f5kgurykkwt8tx")
@@ -256,12 +256,12 @@ CALL_METHOD
 ;
 TAKE_ALL_FROM_WORKTOP
     Address("resource_tdx_2_1nfwuan2gh5xel94wsfrsumfh4egrjqglh8vuu5xfd286s7ehh27z3v")
-    Bucket("buy_order_bucket")
+    Bucket("liquidity_receipt_bucket")
 ;
 CALL_METHOD
     Address("component_tdx_2_1crjwphalz3j3rvaftxm0yq77u3xkrfn3wcgs90r28jern2qrqc8v53")
     "collect_fills"
-    Bucket("buy_order_bucket")
+    Bucket("liquidity_receipt_bucket")
 ;
 CALL_METHOD
     Address("account_tdx_2_129z7yju29wkvgm5fmcuuvaeqmfh9cvnl78s6jxu4f5kgurykkwt8tx")
@@ -285,12 +285,12 @@ CALL_METHOD
 ;
 TAKE_ALL_FROM_WORKTOP
     Address("resource_tdx_2_1nfwuan2gh5xel94wsfrsumfh4egrjqglh8vuu5xfd286s7ehh27z3v")
-    Bucket("buy_order_bucket")
+    Bucket("liquidity_receipt_bucket")
 ;
 CALL_METHOD
     Address("component_tdx_2_1crjwphalz3j3rvaftxm0yq77u3xkrfn3wcgs90r28jern2qrqc8v53")
     "collect_fills"
-    Bucket("buy_order_bucket")
+    Bucket("liquidity_receipt_bucket")
 ;
 CALL_METHOD
     Address("account_tdx_2_129z7yju29wkvgm5fmcuuvaeqmfh9cvnl78s6jxu4f5kgurykkwt8tx")
@@ -314,12 +314,12 @@ CALL_METHOD
 ;
 TAKE_ALL_FROM_WORKTOP
     Address("resource_tdx_2_1nfwuan2gh5xel94wsfrsumfh4egrjqglh8vuu5xfd286s7ehh27z3v")
-    Bucket("buy_order_bucket")
+    Bucket("liquidity_receipt_bucket")
 ;
 CALL_METHOD
     Address("component_tdx_2_1crjwphalz3j3rvaftxm0yq77u3xkrfn3wcgs90r28jern2qrqc8v53")
     "collect_fills"
-    Bucket("buy_order_bucket")
+    Bucket("liquidity_receipt_bucket")
 ;
 CALL_METHOD
     Address("account_tdx_2_129z7yju29wkvgm5fmcuuvaeqmfh9cvnl78s6jxu4f5kgurykkwt8tx")
@@ -596,7 +596,7 @@ CALL_METHOD
     # Selected account address from dropdown associated with persona
     Address("account_tdx_2_129z7yju29wkvgm5fmcuuvaeqmfh9cvnl78s6jxu4f5kgurykkwt8tx")
     "withdraw_non_fungibles"
-    # Static address for buy_order NFT
+    # Static address for liquidity_receipt NFT
     Address("resource_tdx_2_1nfwuan2gh5xel94wsfrsumfh4egrjqglh8vuu5xfd286s7ehh27z3v")
     # Connect this NFT ID selection a button in the "Your Orders" section
     Array<NonFungibleLocalId>(
@@ -604,15 +604,15 @@ CALL_METHOD
     )
 ;
 TAKE_ALL_FROM_WORKTOP
-    # Static address for buy_order NFT
+    # Static address for liquidity_receipt NFT
     Address("resource_tdx_2_1nfwuan2gh5xel94wsfrsumfh4egrjqglh8vuu5xfd286s7ehh27z3v")
-    Bucket("buy_order_bucket")
+    Bucket("liquidity_receipt_bucket")
 ;
 CALL_METHOD
     # Static Liquify component address
     Address("component_tdx_2_1crjwphalz3j3rvaftxm0yq77u3xkrfn3wcgs90r28jern2qrqc8v53")
     "remove_liquidity"
-    Bucket("buy_order_bucket")
+    Bucket("liquidity_receipt_bucket")
 ;
 CALL_METHOD
     # Selected account address from dropdown associated with persona
@@ -656,7 +656,7 @@ CALL_METHOD
     # Selected account address from dropdown associated with persona
     Address("account_tdx_2_129z7yju29wkvgm5fmcuuvaeqmfh9cvnl78s6jxu4f5kgurykkwt8tx")
     "withdraw_non_fungibles"
-    # Static address for buy_order NFT
+    # Static address for liquidity_receipt NFT
     Address("resource_tdx_2_1nf0nlf9upwf7d429u962qa6w9kstx8fa0qyw7j7vmthnvzqpw6kqcw")
     # Connect this NFT ID selection a button in the "Your Orders" section
     Array<NonFungibleLocalId>(
@@ -664,15 +664,15 @@ CALL_METHOD
     )
 ;
 TAKE_ALL_FROM_WORKTOP
-    # Static address for buy_order NFT
+    # Static address for liquidity_receipt NFT
     Address("resource_tdx_2_1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxtfd2jc")
-    Bucket("buy_order_bucket")
+    Bucket("liquidity_receipt_bucket")
 ;
 CALL_METHOD
     # Static Liquify component address
     Address("component_tdx_2_1crjwphalz3j3rvaftxm0yq77u3xkrfn3wcgs90r28jern2qrqc8v53")
     "collect_fills"
-    Bucket("buy_order_bucket")
+    Bucket("liquidity_receipt_bucket")
 ;
 CALL_METHOD
     # Selected account address from dropdown associated with persona

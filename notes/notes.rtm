@@ -128,8 +128,8 @@
         //     for (discount, orders) in new_buy_list.iter_mut() {
         //         while remaining_value_of_lsus > Decimal::ZERO && !orders.is_empty() {
         //             let global_id = orders.remove(0);
-        //             let mut data: BuyOrderDetails = self.buy_order.get_non_fungible_data(&global_id.local_id());
-        //             let buy_order_amount_remaining = data.buy_order_amount_remaining;
+        //             let mut data: BuyOrderDetails = self.liquidity_receipt.get_non_fungible_data(&global_id.local_id());
+        //             let liquidity_receipt_amount_remaining = data.liquidity_receipt_amount_remaining;
         
         //             // Calculate the value of the LSUs being sold at the current discount
         //             let total_lsu_value_at_current_discount = lsu_face_value * (Decimal::ONE - *discount);
@@ -137,13 +137,13 @@
         //             let lsu_amount_to_take;
         
         //             // If the total value at the current discount is less than or equal to the order amount remaining, fill the whole order
-        //             if remaining_value_of_lsus <= buy_order_amount_remaining / (Decimal::ONE - *discount) {
+        //             if remaining_value_of_lsus <= liquidity_receipt_amount_remaining / (Decimal::ONE - *discount) {
         //                 lsu_amount_to_take = remaining_value_of_lsus;
         //                 fill_amount = remaining_value_of_lsus * (Decimal::ONE - *discount);
         //             } else {
         //                 // Otherwise, find value of the lsus that can be filled divided by total value of the lsus
-        //                 lsu_amount_to_take = buy_order_amount_remaining / (Decimal::ONE - *discount);
-        //                 fill_amount = buy_order_amount_remaining;
+        //                 lsu_amount_to_take = liquidity_receipt_amount_remaining / (Decimal::ONE - *discount);
+        //                 fill_amount = liquidity_receipt_amount_remaining;
         //             }
         
         //             let xrd_funds = self.xrd_liquidity.take(fill_amount);
@@ -156,24 +156,24 @@
         //             info!("unstake nft address from market sell: {:?}", unstake_nft.resource_address());
         //             unstake_nfts.push(unstake_nft);
         
-        //             let new_order_amount_filled: Decimal = data.buy_order_amount_filled + fill_amount;
-        //             let new_order_amount_remaining: Decimal = data.buy_order_amount_remaining - fill_amount;
-        //             let mut new_order_fills_to_collect: Vec<NonFungibleGlobalId> = data.buy_order_fills_to_collect;
+        //             let new_order_amount_filled: Decimal = data.liquidity_receipt_amount_filled + fill_amount;
+        //             let new_order_amount_remaining: Decimal = data.liquidity_receipt_amount_remaining - fill_amount;
+        //             let mut new_order_fills_to_collect: Vec<NonFungibleGlobalId> = data.liquidity_receipt_fills_to_collect;
         //             info!("new_order_fills_to_collect: {:?}", new_order_fills_to_collect);
         //             new_order_fills_to_collect.push(global_id.clone());
         //             remaining_value_of_lsus -= lsu_amount_to_take;
         
         //             if new_order_amount_remaining == Decimal::ZERO {
-        //                 data.buy_order_status = OrderStatus::Filled;
-        //                 self.buy_order.update_non_fungible_data(&global_id.local_id(), "buy_order_status", data.buy_order_status);
+        //                 data.liquidity_receipt_status = OrderStatus::Filled;
+        //                 self.liquidity_receipt.update_non_fungible_data(&global_id.local_id(), "liquidity_receipt_status", data.liquidity_receipt_status);
         //             } else {
         //                 // Reinsert partially filled order
         //                 orders.insert(0, global_id.clone());
         //             }
         
-        //             self.buy_order.update_non_fungible_data(&global_id.local_id(), "buy_order_amount_filled", new_order_amount_filled);
-        //             self.buy_order.update_non_fungible_data(&global_id.local_id(), "buy_order_amount_remaining", new_order_amount_remaining);
-        //             self.buy_order.update_non_fungible_data(&global_id.local_id(), "buy_order_fills_to_collect", new_order_fills_to_collect);
+        //             self.liquidity_receipt.update_non_fungible_data(&global_id.local_id(), "liquidity_receipt_amount_filled", new_order_amount_filled);
+        //             self.liquidity_receipt.update_non_fungible_data(&global_id.local_id(), "liquidity_receipt_amount_remaining", new_order_amount_remaining);
+        //             self.liquidity_receipt.update_non_fungible_data(&global_id.local_id(), "liquidity_receipt_fills_to_collect", new_order_fills_to_collect);
         
         //             // Update the liquidity index according to how much XRD is coming out of the liquidity pool
         //             let index = (*discount / dec!(0.005)).checked_floor().unwrap().to_string().parse::<usize>().unwrap();
@@ -202,30 +202,30 @@
         //     (xrd_bucket, lsu_bucket)
         // }
 
-        // pub fn collect_unstake_nft(&mut self, buy_order_bucket: Bucket) -> Vec<Bucket> {
+        // pub fn collect_unstake_nft(&mut self, liquidity_receipt_bucket: Bucket) -> Vec<Bucket> {
         //     // Ensure the bucket contains the buy order NFT
-        //     assert!(buy_order_bucket.resource_address() == self.buy_order.address(), "Bucket must contain buy order NFT");
+        //     assert!(liquidity_receipt_bucket.resource_address() == self.liquidity_receipt.address(), "Bucket must contain buy order NFT");
         
         //     // Retrieve buy order data
-        //     let mut data: BuyOrderDetails = self.buy_order.get_non_fungible_data(&buy_order_bucket.as_non_fungible().non_fungible_local_id());
+        //     let mut data: BuyOrderDetails = self.liquidity_receipt.get_non_fungible_data(&liquidity_receipt_bucket.as_non_fungible().non_fungible_local_id());
         
         //     // Check if there are any unstake NFTs to collect
-        //     assert!(data.buy_order_fills_to_collect.len() > 0, "No unstake NFTs to collect");
+        //     assert!(data.liquidity_receipt_fills_to_collect.len() > 0, "No unstake NFTs to collect");
         
         //     let mut bucket_vec: Vec<Bucket> = Vec::new();
         
         //     // Limit the number of NFTs to collect to 10
-        //     let num_to_collect = if data.buy_order_fills_to_collect.len() > 10 {
+        //     let num_to_collect = if data.liquidity_receipt_fills_to_collect.len() > 10 {
         //         10
         //     } else {
-        //         data.buy_order_fills_to_collect.len()
+        //         data.liquidity_receipt_fills_to_collect.len()
         //     };
 
         //     info!("num_to_collect: {:?}", num_to_collect);
         
         //     // Collect the unstake NFTs and remove them from the order_fills_to_collect vector
         //     for _ in 0..num_to_collect {
-        //         if let Some(unstake_nft_global_id) = data.buy_order_fills_to_collect.pop() {
+        //         if let Some(unstake_nft_global_id) = data.liquidity_receipt_fills_to_collect.pop() {
         //             let id = unstake_nft_global_id.local_id();
         //             let resource = unstake_nft_global_id.resource_address();
         //             info!("resource: {:?}", resource);
@@ -238,10 +238,10 @@
         //     }
         
         //     // Update the order_fills_to_collect vector in the buy order data
-        //     self.buy_order.update_non_fungible_data(
-        //         &buy_order_bucket.as_non_fungible().non_fungible_local_id(),
+        //     self.liquidity_receipt.update_non_fungible_data(
+        //         &liquidity_receipt_bucket.as_non_fungible().non_fungible_local_id(),
         //         "order_fills_to_collect",
-        //         data.buy_order_fills_to_collect.clone()
+        //         data.liquidity_receipt_fills_to_collect.clone()
         //     );
         
         //     // Return the vector of buckets to the user

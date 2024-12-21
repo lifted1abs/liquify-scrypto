@@ -37,7 +37,7 @@ CALL_METHOD
     # Selected account address from dropdown associated with persona
     Address("account_tdx_2_129z7yju29wkvgm5fmcuuvaeqmfh9cvnl78s6jxu4f5kgurykkwt8tx")
     "withdraw_non_fungibles"
-    # Static address for buy_order NFT
+    # Static address for liquidity_receipt NFT
     Address("resource_tdx_2_1nf0nlf9upwf7d429u962qa6w9kstx8fa0qyw7j7vmthnvzqpw6kqcw")
     # Connect this NFT ID selection a button in the "Your Orders" section
     Array<NonFungibleLocalId>(
@@ -45,15 +45,15 @@ CALL_METHOD
     )
 ;
 TAKE_ALL_FROM_WORKTOP
-    # Static address for buy_order NFT
+    # Static address for liquidity_receipt NFT
     Address("resource_tdx_2_1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxtfd2jc")
-    Bucket("buy_order_bucket")
+    Bucket("liquidity_receipt_bucket")
 ;
 CALL_METHOD
     # Static Liquify component address
     Address("component_tdx_2_1cqflwxlrsrjp324gfjny6s38385uff6za4acntgtwjn0psnf0h834m")
     "remove_liquidity"
-    Bucket("buy_order_bucket")
+    Bucket("liquidity_receipt_bucket")
 ;
 CALL_METHOD
     # Selected account address from dropdown associated with persona
@@ -91,13 +91,13 @@ CALL_METHOD
     Expression("ENTIRE_WORKTOP")
 ;
 
-collect_fills => PUBLIC to be used with "Collect Fills" button in "Your Orders" section
+collect_fills => PUBLIC
 
 CALL_METHOD
     # Selected account address from dropdown associated with persona
     Address("account_tdx_2_129z7yju29wkvgm5fmcuuvaeqmfh9cvnl78s6jxu4f5kgurykkwt8tx")
     "withdraw_non_fungibles"
-    # Static address for buy_order NFT
+    # Static address for liquidity_receipt NFT
     Address("resource_tdx_2_1nf0nlf9upwf7d429u962qa6w9kstx8fa0qyw7j7vmthnvzqpw6kqcw")
     # Connect this NFT ID selection a button in the "Your Orders" section
     Array<NonFungibleLocalId>(
@@ -105,15 +105,15 @@ CALL_METHOD
     )
 ;
 TAKE_ALL_FROM_WORKTOP
-    # Static address for buy_order NFT
+    # Static address for liquidity_receipt NFT
     Address("resource_tdx_2_1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxtfd2jc")
-    Bucket("buy_order_bucket")
+    Bucket("liquidity_receipt_bucket")
 ;
 CALL_METHOD
     # Static Liquify component address
     Address("component_tdx_2_1cqflwxlrsrjp324gfjny6s38385uff6za4acntgtwjn0psnf0h834m")
     "collect_fills"
-    Bucket("buy_order_bucket")
+    Bucket("liquidity_receipt_bucket")
 ;
 CALL_METHOD
     # Selected account address from dropdown associated with persona

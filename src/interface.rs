@@ -23,9 +23,7 @@ mod interface_module {
     struct LiquifyInterface {
 
         liquify_interface_owner_badge: ResourceAddress,
-
         active_liquify_component_address: Option<ComponentAddress>,
-
         active_liquify_component: Option<Global<Liquify>>,
     }
 
@@ -134,7 +132,6 @@ mod interface_module {
             
             liquify_component.burn_closed_receipts(orders);
         } 
-
 
     }
 }
