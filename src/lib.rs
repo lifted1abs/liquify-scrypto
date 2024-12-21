@@ -1,5 +1,5 @@
 mod liquify;
-// mod interface;
+mod interface;
 
 // Before release
 // add in event stream stuff from oci/krullnull

@@ -3,10 +3,6 @@ use scrypto_avltree::AvlTree;
 
 #[derive(NonFungibleData, ScryptoSbor, PartialEq, Debug, Clone)]
 pub struct LiquidityDetails {
-    // #[mutable]
-    // name: String,
-    // #[mutable]
-    // description: String,
     key_image_url: Url,
     #[mutable]
     liquidity_status: LiquidityStatus,
@@ -100,7 +96,7 @@ mod liquify_module {
         component_vaults: KeyValueStore<ResourceAddress, Vault>,
         total_xrd_volume: Decimal,
         total_xrd_locked: Decimal,
-        component_status: Decimal,  // 1 = active, accepting liquidity _ = inactive, not accepting new liquidity
+        component_status: bool,  // 1 = active, accepting liquidity _ = inactive, not accepting new liquidity
         order_fill_counter: u64,  // Globally increasing counter for order fills
         liquidity_index: Vec<Decimal>,  // Index of total liquidity at each discount level
         discounts: Vec<Decimal>,  // List of discounts available
@@ -178,7 +174,7 @@ mod liquify_module {
                 discounts,
                 total_xrd_volume: Decimal::ZERO,
                 total_xrd_locked: Decimal::ZERO,
-                component_status: dec!(1),
+                component_status: true,
                 order_fill_counter: 1,
                 platform_fee: dec!(0.00), // 0% fee
                 fee_vault: Vault::new(XRD),
@@ -227,7 +223,7 @@ mod liquify_module {
         pub fn add_liquidity(&mut self, xrd_bucket: Bucket, discount: Decimal, auto_unstake: bool) -> Bucket {
             
             // ensure component is active and user is passing in a large enough amount of XRD
-            assert!(self.component_status == dec!(1), "Liquify is not accepting new liquidity at this time.");
+            assert!(self.component_status == true, "Liquify is not accepting new liquidity at this time.");
             assert!(xrd_bucket.resource_address() == XRD, "Bucket must contain XRD");
             assert!(xrd_bucket.amount() >= self.minimum_liquidity, "This amount is below the minimum liquidity requirement XRD");
         
@@ -766,7 +762,7 @@ mod liquify_module {
             self.fee_vault.take_all()
         }
         
-        pub fn set_component_status(&mut self, status: Decimal) {
+        pub fn set_component_status(&mut self, status: bool) {
             self.component_status = status;
             // info!("Component status set to: {}", status);
         }
