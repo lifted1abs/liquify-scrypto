@@ -891,7 +891,7 @@ mod liquify_module {
             if !self.component_vaults.get(&resource).is_some() {
 
                 let new_vault = Vault::new(resource);
-
+                
                 self.component_vaults.insert(resource, new_vault);
             }
         }
