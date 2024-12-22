@@ -178,7 +178,7 @@ mod liquify_module {
                 order_fill_counter: 1,
                 platform_fee: dec!(0.00), // 0% fee
                 fee_vault: Vault::new(XRD),
-                max_liquidity_iter: 29,
+                max_liquidity_iter: 28,
                 minimum_liquidity: dec!(1000),
             }
             .instantiate()
