@@ -249,14 +249,11 @@ mod liquify_module {
         
             // Convert discount to a u64 and combine with order ID into a single u128 key
             let discount_u64 = (discount * dec!(10000)).checked_floor().unwrap().to_string().parse::<u64>().unwrap();
-            // info!("Adding liquidity with discount: {}", discount_u64);
 
             let combined_key = CombinedKey::new(discount_u64, self.liquidity_receipt_counter);
-            // info!("Creating combined key: {} from discount_u64: {} and order ID: {}", combined_key.key, discount_u64, self.liquidity_receipt_counter);
         
             // Mint new buy order NFT
             let id = NonFungibleLocalId::Integer(IntegerNonFungibleLocalId::new(self.liquidity_receipt_counter));
-            // info!("Creating new buy order with ID: {:?}", id);
 
             let liquidity_receipt_data = LiquidityDetails {
                 key_image_url: Url::of("https://bafybeicha7fu5nu2j6g7k3siljiqlv6nbu2qbwpcc7jqzzqpios6mrh56i.ipfs.w3s.link/liquify1.jpg"),
@@ -290,11 +287,6 @@ mod liquify_module {
             
             // Put buy order liquidity in vault
             self.xrd_liquidity.put(xrd_bucket);
-        
-            // Display the buy_list for debugging purposes
-            // for (key, value, _next_key) in self.buy_list.range(0..u128::MAX) {
-            //     info!("Combined Key: {}, Order ID: {}, Discount: {}, Global ID: {:?}", key, key >> 64, key as u64, value);
-            // }
         
             // Return the new buy order at the end
             new_liquidity_receipt
@@ -353,9 +345,7 @@ mod liquify_module {
         
                 // Remove the buy order from the AVL tree using the combined key
                 let discount_u64 = (discount * dec!(10000)).checked_floor().unwrap().to_string().parse::<u64>().unwrap();
-                // info!("Removing buy order with ID: {}, Discount: {}", local_id_u64, discount_u64);
                 let combined_key = CombinedKey::new(discount_u64, local_id_u64).key;
-                // info!("Combined Key: {}", combined_key);
 
                 self.buy_list.remove(&combined_key);
                 
@@ -403,8 +393,6 @@ mod liquify_module {
             let mut xrd_bucket: Bucket = Bucket::new(XRD); // Initialize an empty bucket to collect XRD
             let mut validator = self.get_validator_from_lsu(lsu_bucket.resource_address()); // Get the validator for the LSU being sold
             let mut redemption_value = validator.get_redemption_value(lsu_bucket.amount());
-
-            // info!("Starting redemption_value value of LSUs is: {} XRD", redemption_value);
         
             let mut updates: HashMap<NonFungibleLocalId, (LiquidityDetails, Bucket, Decimal, Decimal)> = HashMap::new();
             let mut lsu_sold_total = Decimal::ZERO; // Track the total amount of LSUs actually sold
@@ -426,8 +414,6 @@ mod liquify_module {
 
                 let discount = data.discount;
                 let discounted_xrd_value_of_lsus = redemption_value * (1 - discount);
-
-                // info!("discounted_xrd_value_of_lsus: {}", discounted_xrd_value_of_lsus);
         
                 // Calculate how much LSU to take and how much XRD to fill
                 if discounted_xrd_value_of_lsus <= xrd_remaining {
@@ -438,25 +424,17 @@ mod liquify_module {
                     // Update the buy order remaining amount and break the loop as we are done
                     xrd_remaining -= fill_amount;
                     redemption_value = Decimal::ZERO; // To break out of the loop
-                    // info!(
-                    //     "Partially filling buy order with key: {}.  This cooresponds to a discount of {} and an order id of {}. Taking {} LSUs to fulfill {} XRD.",
-                    //     avl_key, discount, local_id, lsu_amount_to_take, fill_amount
-                    // );
+
                 } else {
+
                     // take LSU amount proportional to the remaining XRD in buy order
                     let max_xrd_for_lsu = redemption_value * (1 - discount);
                     lsu_amount_to_take = lsu_bucket.amount() * (xrd_remaining / max_xrd_for_lsu);
-                    // info!("lsu_amount_to_take: {}", lsu_amount_to_take);
+
                     fill_amount = xrd_remaining;
 
-                    
                     redemption_value = redemption_value * ((lsu_bucket.amount() - lsu_amount_to_take) / lsu_bucket.amount());
                     xrd_remaining = Decimal::ZERO; // No liquidity remaining in this order
-        
-                    // info!(
-                    //     "Fully filling buy order with key: {}.  This cooresponds to a discount of {} and an order id of {}. Taking {} LSUs to fulfill {} XRD.",
-                    //     avl_key, discount, local_id, lsu_amount_to_take, fill_amount
-                    // );
                 }
         
                 let lsu_taken = lsu_bucket.take(lsu_amount_to_take); // Take the calculated amount of LSUs
@@ -471,7 +449,6 @@ mod liquify_module {
                 iteration_count += 1;
     
                 if redemption_value.is_zero() {
-                    // info!("All LSUs have been sold. Breaking out of loop.");
                     return scrypto_avltree::IterMutControl::Break;
                 }
         
@@ -536,15 +513,8 @@ mod liquify_module {
             self.total_xrd_locked -= xrd_bucket.amount();
         
             let fee_bucket =  xrd_bucket.take(xrd_bucket.amount().clone().checked_mul(self.platform_fee).unwrap());
-            // info!("fee bucket amount about to be deposited to component vault: {}", fee_bucket.amount());
             self.fee_vault.put(fee_bucket);
 
-            // info!("XRD amount returned to user: {}", xrd_bucket.amount());
-            // info!("LSU amount returned to user: {}", lsu_bucket.amount());
-            // info!("Total XRD volume: {}", self.total_xrd_volume);
-            // info!("Total XRD locked: {}", self.total_xrd_locked);
-            // info!("total xrd in vault: {}", self.xrd_liquidity.amount());
-            
             // Return the filled XRD bucket and the remaining LSU bucket
             (xrd_bucket, lsu_bucket)
         }
@@ -573,9 +543,6 @@ mod liquify_module {
             let mut xrd_bucket: Bucket = Bucket::new(XRD); // Initialize an empty bucket to collect XRD
             let mut validator = self.get_validator_from_lsu(lsu_bucket.resource_address()); // Get the validator for the LSU being sold
             let mut redemption_value = validator.get_redemption_value(lsu_bucket.amount());
-
-            // let mut xrd_face_value_of_lsus = validator.get_redemption_value(lsu_bucket.amount()); // Calculate the XRD value of the LSUs being sold
-            // info!("XRD face value of LSUs is: {} XRD", xrd_face_value_of_lsus);
         
             let mut updates = vec![];
             let mut lsu_sold_total = Decimal::ZERO; // Track the total amount of LSUs actually sold
@@ -592,7 +559,6 @@ mod liquify_module {
 
                 let discount = data.discount;
                 let discounted_xrd_value_of_lsus: Decimal = redemption_value * (1 - discount);
-                // info!("discounted_xrd_value_of_lsus: {}", discounted_xrd_value_of_lsus);
         
                 // Calculate how much LSU to take and how much XRD to fill
                 if discounted_xrd_value_of_lsus <= xrd_remaining {
@@ -604,27 +570,17 @@ mod liquify_module {
                     // Update the buy order remaining amount and break the loop as we are done
                     xrd_remaining -= fill_amount;
                     redemption_value = Decimal::ZERO; // To break out of the loop
-                    // info!(
-                    //     "Partially filling buy order with key: {}.  This cooresponds to a discount of {} and an order id of {}. Taking {} LSUs to fulfill {} XRD.",
-                    //     avl_key, discount, local_id, lsu_amount_to_take, fill_amount
-                    // );
 
                 } else {
 
                     // take LSU amount proportional to the remaining XRD in buy order
                     let max_xrd_for_lsu = redemption_value * (1 - discount);
                     lsu_amount_to_take = lsu_bucket.amount() * (xrd_remaining / max_xrd_for_lsu);
-                    // info!("lsu_amount_to_take: {}", lsu_amount_to_take);
                     fill_amount = xrd_remaining;
 
                     
                     redemption_value = redemption_value * ((lsu_bucket.amount() - lsu_amount_to_take) / lsu_bucket.amount());
                     xrd_remaining = Decimal::ZERO; // No liquidity remaining in this order
-        
-                    // info!(
-                    //     "Fully filling buy order with key: {}.  This cooresponds to a discount of {} and an order id of {}. Taking {} LSUs to fulfill {} XRD.",
-                    //     avl_key, discount, local_id, lsu_amount_to_take, fill_amount
-                    // );
                 }
         
                 let lsu_taken = lsu_bucket.take(lsu_amount_to_take); // Take the calculated amount of LSUs
@@ -636,7 +592,6 @@ mod liquify_module {
                 updates.push((local_id.clone(), data.clone(), lsu_taken, fill_amount, xrd_remaining));
     
                 if redemption_value.is_zero() {
-                    // info!("All LSUs have been sold. Breaking out of loop.");
                     break;
                 }
         
@@ -702,14 +657,7 @@ mod liquify_module {
             self.total_xrd_locked -= xrd_bucket.amount();
         
             let fee_bucket =  xrd_bucket.take(xrd_bucket.amount().clone().checked_mul(self.platform_fee).unwrap());
-            // info!("fee bucket amount about to be deposited to component vault: {}", fee_bucket.amount());
             self.fee_vault.put(fee_bucket);
-
-            // info!("XRD amount returned to user: {}", xrd_bucket.amount());
-            // info!("LSU amount returned to user: {}", lsu_bucket.amount());
-            // info!("Total XRD volume: {}", self.total_xrd_volume);
-            // info!("Total XRD locked: {}", self.total_xrd_locked);
-            // info!("total xrd in vault: {}", self.xrd_liquidity.amount());
             
             // Return the filled XRD bucket and the remaining LSU bucket
             (xrd_bucket, lsu_bucket)
@@ -823,7 +771,15 @@ mod liquify_module {
             (bucket_vec, liquidity_receipt_bucket)
         }
 
-        
+        /// Allows user an option to burn closed liquidity receipts if they wish.
+        /// 
+        /// This method checks that liquidity receipts input are closed and then burns them.
+        /// 
+        /// # Arguments
+        /// * `receipts`: A `Bucket` containing the liquidity receipt NFTs.
+        ///
+        /// # Returns
+        /// * None
         pub fn burn_closed_receipts(&mut self, receipts: Bucket) {
 
             // Ensure the bucket contains a liquidity receipt
@@ -868,7 +824,6 @@ mod liquify_module {
         /// * None
         pub fn set_component_status(&mut self, status: bool) {
             self.component_status = status;
-            // info!("Component status set to: {}", status);
         }
 
         /// Allows protocol owner to collect any fees that have been generated by the platform.
@@ -938,8 +893,6 @@ mod liquify_module {
                 let new_vault = Vault::new(resource);
 
                 self.component_vaults.insert(resource, new_vault);
-
-                // info!("Created new vault for resource: {:?}", resource);
             }
         }
 
@@ -954,8 +907,6 @@ mod liquify_module {
 
             let validator: Global<Validator> = Global::from(validator_address);
 
-            // info!("Retrieved validator from LSU address: {:?}", lsu_address);
-
             validator
         }
 
@@ -969,8 +920,6 @@ mod liquify_module {
                 .unwrap_or_else(|| Runtime::panic(String::from("Not an LSU!")));
             
             let is_valid = input_lsu_address == ResourceAddress::try_from(lsu_address).unwrap();
-
-            // info!("LSU validation for address {:?}: {}", input_lsu_address, is_valid);
 
             is_valid
         }
