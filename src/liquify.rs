@@ -81,6 +81,7 @@ mod liquify_module {
             set_max_liquidity_iter => restrict_to: [owner];
             set_max_fills_to_collect => restrict_to: [owner];
             set_minimum_liquidity => restrict_to: [owner];
+            set_receipt_image_url => restrict_to: [owner];
         }
     }
 
@@ -104,6 +105,7 @@ mod liquify_module {
         fee_vault: Vault,
         max_liquidity_iter: u64,  // Maximum number of liquidity nfts to iterate through in a single transaction
         minimum_liquidity: Decimal,  // Minimum liquidity required to add a new buy order
+        receipt_image_url: Url,
     }
 
     impl Liquify {
@@ -117,7 +119,7 @@ mod liquify_module {
                 .metadata(metadata!(
                     init {
                         "name" => "Liquify Owner Badge".to_string(), locked;
-                        "icon_url" => Url::of("https://bafybeicha7fu5nu2j6g7k3siljiqlv6nbu2qbwpcc7jqzzqpios6mrh56i.ipfs.w3s.link/liquify1.jpg"), updatable;
+                        "icon_url" => Url::of("https://bafybeif5tjpcgjgfo2lt6pp3qnz5s7mdpejfhgkracs7hzreoeg3bw3wae.ipfs.w3s.link/liquify_icon.png"), updatable;
                     }
                 ))
                 .divisibility(DIVISIBILITY_NONE)
@@ -132,7 +134,7 @@ mod liquify_module {
                     init {
                         "name" => "Liquify Liquidity Receipt".to_owned(), updatable;
                         "description" => "Receipt for providing liquidity on the Liquify platform".to_string(), updatable;
-                        "icon_url" => Url::of("https://bafybeicha7fu5nu2j6g7k3siljiqlv6nbu2qbwpcc7jqzzqpios6mrh56i.ipfs.w3s.link/liquify1.jpg"), updatable;
+                        "icon_url" => Url::of("https://bafybeif5tjpcgjgfo2lt6pp3qnz5s7mdpejfhgkracs7hzreoeg3bw3wae.ipfs.w3s.link/liquify_icon.png"), updatable;
                         "tags" => tags.clone(), updatable;
                     }
                 ))
@@ -180,6 +182,7 @@ mod liquify_module {
                 fee_vault: Vault::new(XRD),
                 max_liquidity_iter: 28,
                 minimum_liquidity: dec!(1000),
+                receipt_image_url: Url::of("https://bafybeib7cokm27lwwkunaibn7hczijn3ztkypbzttmt7hymaov44s5e5sm.ipfs.w3s.link/liquify2.png"),
             }
             .instantiate()
             .prepare_to_globalize(
@@ -213,6 +216,7 @@ mod liquify_module {
                     set_max_liquidity_iter => Free, updatable;
                     set_max_fills_to_collect => Free, updatable;
                     set_minimum_liquidity => Free, updatable;
+                    set_receipt_image_url => Free, updatable;
                 }
             })
             .globalize();
@@ -256,7 +260,7 @@ mod liquify_module {
             let id = NonFungibleLocalId::Integer(IntegerNonFungibleLocalId::new(self.liquidity_receipt_counter));
 
             let liquidity_receipt_data = LiquidityDetails {
-                key_image_url: Url::of("https://bafybeicha7fu5nu2j6g7k3siljiqlv6nbu2qbwpcc7jqzzqpios6mrh56i.ipfs.w3s.link/liquify1.jpg"),
+                key_image_url: self.receipt_image_url.clone(),
                 liquidity_status: LiquidityStatus::Open,
                 total_xrd_amount: xrd_bucket.amount(),
                 discount: discount,
@@ -883,6 +887,10 @@ mod liquify_module {
         /// * None
         pub fn set_minimum_liquidity(&mut self, min: Decimal) {
             self.minimum_liquidity = min;
+        }
+
+        pub fn set_receipt_image_url(&mut self, url: String) {
+            self.receipt_image_url = Url::of(url);
         }
  
 
