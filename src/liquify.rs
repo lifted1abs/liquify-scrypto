@@ -206,8 +206,8 @@ mod liquify_module {
                 init {
                     add_liquidity => Xrd(1.into()), updatable;
                     remove_liquidity => Xrd(1.into()), updatable;
-                    liquify_unstake => Xrd(1.into()), updatable;
-                    liquify_unstake_off_ledger => Xrd(1.into()), updatable;
+                    liquify_unstake => Xrd(5.into()), updatable;
+                    liquify_unstake_off_ledger => Xrd(5.into()), updatable;
                     collect_fills => Xrd(1.into()), updatable;
                     burn_closed_receipts => Xrd(1.into()), updatable;
                     set_component_status => Free, updatable;
