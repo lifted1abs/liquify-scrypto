@@ -81,7 +81,7 @@ mod interface_module {
             self.active_liquify_component = Some(component_address.into());
         }
         
-        pub fn add_liquidity(&mut self, xrd_bucket: Bucket, discount: Decimal, auto_unstake: bool) -> Bucket {
+        pub fn add_liquidity(&mut self, xrd_bucket: Bucket, discount: Decimal, auto_unstake: bool) -> NonFungibleBucket {
             
             let liquify_component: Global<Liquify> = self.active_liquify_component.unwrap().into();
 
@@ -99,7 +99,7 @@ mod interface_module {
             (liquidity_bucket, liquidity_receipt_bucket)
         }
 
-        pub fn liquify_unstake(&mut self, lsu_bucket: Bucket) -> (Bucket, Bucket) {
+        pub fn liquify_unstake(&mut self, lsu_bucket: FungibleBucket) -> (Bucket, FungibleBucket) {
 
             let liquify_component: Global<Liquify> = self.active_liquify_component.unwrap().into();
             
@@ -108,7 +108,7 @@ mod interface_module {
             (xrd_bucket, lsu_bucket)
         }
 
-        pub fn liquify_unstake_off_ledger(&mut self, lsu_bucket: Bucket, order_keys: Vec<u128>) -> (Bucket, Bucket) {
+        pub fn liquify_unstake_off_ledger(&mut self, lsu_bucket: FungibleBucket, order_keys: Vec<u128>) -> (Bucket, FungibleBucket) {
 
             let liquify_component: Global<Liquify> = self.active_liquify_component.unwrap().into();
             

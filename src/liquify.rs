@@ -89,7 +89,7 @@ mod liquify_module {
 
         liquify_owner_badge: ResourceAddress,
         xrd_liquidity: Vault, // holds all XRD liquidity
-        liquidity_receipt: ResourceManager,
+        liquidity_receipt: NonFungibleResourceManager,
         liquidity_receipt_counter: u64,
         max_fills_to_collect: u64, // Maximum number of fills to collect in a single transaction
         buy_list: AvlTree<u128, NonFungibleGlobalId>, // Data structure for all liquidity receipts
@@ -241,7 +241,7 @@ mod liquify_module {
         ///
         /// # Returns
         /// * A `Bucket` containing the new liquidity receipt NFT that have been minted to track the liquidity.
-        pub fn add_liquidity(&mut self, xrd_bucket: Bucket, discount: Decimal, auto_unstake: bool) -> Bucket {
+        pub fn add_liquidity(&mut self, xrd_bucket: Bucket, discount: Decimal, auto_unstake: bool) -> NonFungibleBucket {
             
             // ensure component is active and user is passing in a large enough amount of XRD
             assert!(self.component_status == true, "Liquify is not accepting new liquidity at this time.");
@@ -270,7 +270,7 @@ mod liquify_module {
                 auto_unstake,
             };
         
-            let new_liquidity_receipt: Bucket = self.liquidity_receipt.mint_non_fungible(&id, liquidity_receipt_data);
+            let new_liquidity_receipt: NonFungibleBucket = self.liquidity_receipt.mint_non_fungible(&id, liquidity_receipt_data);
             self.liquidity_receipt_counter += 1;
         
             // Insert the new buy order into the AVL tree
@@ -389,7 +389,7 @@ mod liquify_module {
         /// * A `Bucket` containing remaining XRD that was deposited in the liquidity pool.
         /// * A `Bucket` containing any remaining LSUs that were not "unstaked" in case the transaction either hits an iteration
         /// limit or the liquidity pool is empty.
-        pub fn liquify_unstake(&mut self, mut lsu_bucket: Bucket) -> (Bucket, Bucket) {
+        pub fn liquify_unstake(&mut self, mut lsu_bucket: FungibleBucket) -> (Bucket, FungibleBucket) {
 
             // Ensure the bucket contains a valid LSU
             assert!(self.validate_lsu(lsu_bucket.resource_address()), "Bucket must contain a native Radix Validator LSU");
@@ -398,7 +398,7 @@ mod liquify_module {
             let mut validator = self.get_validator_from_lsu(lsu_bucket.resource_address()); // Get the validator for the LSU being sold
             let mut redemption_value = validator.get_redemption_value(lsu_bucket.amount());
         
-            let mut updates: HashMap<NonFungibleLocalId, (LiquidityDetails, Bucket, Decimal, Decimal)> = HashMap::new();
+            let mut updates: HashMap<NonFungibleLocalId, (LiquidityDetails, FungibleBucket, Decimal, Decimal)> = HashMap::new();
             let mut lsu_sold_total = Decimal::ZERO; // Track the total amount of LSUs actually sold
             let mut iteration_count = 0; // Track the number of iterations
             
@@ -441,7 +441,7 @@ mod liquify_module {
                     xrd_remaining = Decimal::ZERO; // No liquidity remaining in this order
                 }
         
-                let lsu_taken = lsu_bucket.take(lsu_amount_to_take); // Take the calculated amount of LSUs
+                let lsu_taken: FungibleBucket = lsu_bucket.take(lsu_amount_to_take); // Take the calculated amount of LSUs
                 let xrd_funds = self.xrd_liquidity.take(fill_amount); // Take the corresponding amount of XRD
                 xrd_bucket.put(xrd_funds); // Add the XRD to the xrd_bucket
 
@@ -493,14 +493,14 @@ mod liquify_module {
                 self.order_fill_counter += 1;
                 
                 if data.auto_unstake {
-                    let unstake_nft = validator.unstake(lsu_taken);
+                    let unstake_nft: NonFungibleBucket = validator.unstake(lsu_taken);
                     let unstake_nft_data = UnstakeNFTOrLSU::UnstakeNFT(UnstakeNFTData {
                         resource_address: unstake_nft.resource_address(),
-                        id: unstake_nft.as_non_fungible().non_fungible_local_id(),
+                        id: unstake_nft.non_fungible_local_id(),
                     });
                     self.order_fill_tree.insert(order_fill_key, unstake_nft_data.clone());
                     self.ensure_user_vault_exists(unstake_nft.resource_address());
-                    self.component_vaults.get_mut(&unstake_nft.resource_address()).unwrap().put(unstake_nft);
+                    self.component_vaults.get_mut(&unstake_nft.resource_address()).unwrap().as_non_fungible().put(unstake_nft);
                 } else {
                     let lsu_data = UnstakeNFTOrLSU::LSU(LSUData {
                         resource_address: lsu_taken.resource_address(),
@@ -508,7 +508,7 @@ mod liquify_module {
                     });
                     self.order_fill_tree.insert(order_fill_key, lsu_data);
                     self.ensure_user_vault_exists(lsu_taken.resource_address());
-                    self.component_vaults.get_mut(&lsu_taken.resource_address()).unwrap().put(lsu_taken);
+                    self.component_vaults.get_mut(&lsu_taken.resource_address()).unwrap().as_fungible().put(lsu_taken);
                 }
             }
 
@@ -536,7 +536,7 @@ mod liquify_module {
         /// * A `Bucket` containing remaining XRD that was deposited in the liquidity pool.
         /// * A `Bucket` containing any remaining LSUs that were not "unstaked" in case the transaction either hits an iteration
         /// limit or the liquidity pool is empty.
-        pub fn liquify_unstake_off_ledger(&mut self, mut lsu_bucket: Bucket, order_keys: Vec<u128>) -> (Bucket, Bucket) {
+        pub fn liquify_unstake_off_ledger(&mut self, mut lsu_bucket: FungibleBucket, order_keys: Vec<u128>) -> (Bucket, FungibleBucket) {
 
             // Ensure the bucket contains a valid LSU
             assert!(self.validate_lsu(lsu_bucket.resource_address()), "Bucket must contain a native Radix Validator LSU");
@@ -587,7 +587,7 @@ mod liquify_module {
                     xrd_remaining = Decimal::ZERO; // No liquidity remaining in this order
                 }
         
-                let lsu_taken = lsu_bucket.take(lsu_amount_to_take); // Take the calculated amount of LSUs
+                let lsu_taken: FungibleBucket = lsu_bucket.take(lsu_amount_to_take); // Take the calculated amount of LSUs
                 let xrd_funds = self.xrd_liquidity.take(fill_amount); // Take the corresponding amount of XRD
                 xrd_bucket.put(xrd_funds); // Add the XRD to the xrd_bucket
 
@@ -638,11 +638,11 @@ mod liquify_module {
                     let unstake_nft = validator.unstake(lsu_taken);
                     let unstake_nft_data = UnstakeNFTOrLSU::UnstakeNFT(UnstakeNFTData {
                         resource_address: unstake_nft.resource_address(),
-                        id: unstake_nft.as_non_fungible().non_fungible_local_id(),
+                        id: unstake_nft.non_fungible_local_id(),
                     });
                     self.order_fill_tree.insert(order_fill_key, unstake_nft_data.clone());
                     self.ensure_user_vault_exists(unstake_nft.resource_address());
-                    self.component_vaults.get_mut(&unstake_nft.resource_address()).unwrap().put(unstake_nft);
+                    self.component_vaults.get_mut(&unstake_nft.resource_address()).unwrap().as_non_fungible().put(unstake_nft);
 
                 } else {
 
@@ -652,7 +652,7 @@ mod liquify_module {
                     });
                     self.order_fill_tree.insert(order_fill_key, lsu_data);
                     self.ensure_user_vault_exists(lsu_taken.resource_address());
-                    self.component_vaults.get_mut(&lsu_taken.resource_address()).unwrap().put(lsu_taken);
+                    self.component_vaults.get_mut(&lsu_taken.resource_address()).unwrap().as_fungible().put(lsu_taken);
                 }
             }
 
