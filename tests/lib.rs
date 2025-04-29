@@ -28,14 +28,7 @@ pub struct TestEnvironment {
 impl TestEnvironment {
     pub fn instantiate_test() -> Self {
 
-        let custom_genesis = CustomGenesis::default(
-            Epoch::of(1),
-            CustomGenesis::default_consensus_manager_config(),
-        );
-        let mut ledger = LedgerSimulatorBuilder::new()
-            .with_custom_genesis(custom_genesis)
-            .without_kernel_trace()
-            .build();
+        let mut ledger = LedgerSimulatorBuilder::new().without_kernel_trace().build();
 
         let (admin_public_key, _admin_private_key, admin_account_address) = ledger.new_allocated_account();
         let admin_account = Account { public_key: admin_public_key, account_address: admin_account_address };
@@ -71,8 +64,13 @@ impl TestEnvironment {
                 "instantiate_liquify",
                 manifest_args!(),
             )
-            .deposit_batch(admin_account_address)
+            .call_method(
+                DynamicGlobalAddress::Static(GlobalAddress::new_or_panic(admin_account.account_address.into())),
+                "deposit_batch".to_string(),
+                manifest_args!(ManifestExpression::EntireWorktop)
+            )
             .build();
+
         let receipt = ledger.execute_manifest(
             manifest,
             vec![NonFungibleGlobalId::from_public_key(&admin_public_key)],
@@ -82,6 +80,12 @@ impl TestEnvironment {
         let liquify_component = receipt.expect_commit(true).new_component_addresses()[0];
         let owner_badge = receipt.expect_commit(true).new_resource_addresses()[0];
         let liquidity_receipt = receipt.expect_commit(true).new_resource_addresses()[1];
+
+
+
+
+
+
 
         // *********** User 1 stakes 1000 XRD to validator to receive LSUs ***********
 
@@ -98,7 +102,11 @@ impl TestEnvironment {
             .call_method_with_name_lookup(validator_address, "stake", |lookup| {
                 (lookup.bucket("xrd"),)
             })
-            .deposit_batch(user_account_address1)
+            .call_method(
+                DynamicGlobalAddress::Static(GlobalAddress::new_or_panic(user_account1.account_address.into())),
+                "deposit_batch".to_string(),
+                manifest_args!(ManifestExpression::EntireWorktop)
+            )
             .build();
 
         let receipt = ledger.execute_manifest(
@@ -106,6 +114,11 @@ impl TestEnvironment {
             vec![NonFungibleGlobalId::from_public_key(&user_public_key1)],
         );
         let commit_success = receipt.expect_commit_success();
+
+
+
+
+
 
         // *********** User 2 stakes 1000 XRD to validator to receive LSUs ***********
 
@@ -120,7 +133,11 @@ impl TestEnvironment {
             .call_method_with_name_lookup(validator_address, "stake", |lookup| {
                 (lookup.bucket("xrd"),)
             })
-            .deposit_batch(user_account_address2)
+            .call_method(
+                DynamicGlobalAddress::Static(GlobalAddress::new_or_panic(user_account2.account_address.into())),
+                "deposit_batch".to_string(),
+                manifest_args!(ManifestExpression::EntireWorktop)
+            )
             .build();
 
         let receipt = ledger.execute_manifest(
@@ -128,6 +145,11 @@ impl TestEnvironment {
             vec![NonFungibleGlobalId::from_public_key(&user_public_key2)],
         );
         let commit_success = receipt.expect_commit_success();
+
+
+
+
+
 
         // *********** User 3 stakes 1000 XRD to validator to receive LSUs ***********
 
@@ -142,7 +164,11 @@ impl TestEnvironment {
             .call_method_with_name_lookup(validator_address, "stake", |lookup| {
                 (lookup.bucket("xrd"),)
             })
-            .deposit_batch(user_account_address3)
+            .call_method(
+                DynamicGlobalAddress::Static(GlobalAddress::new_or_panic(user_account3.account_address.into())),
+                "deposit_batch".to_string(),
+                manifest_args!(ManifestExpression::EntireWorktop)
+            )
             .build();
 
         let receipt = ledger.execute_manifest(
@@ -159,6 +185,11 @@ impl TestEnvironment {
 
         println!("lsu_address {:?}", lsu_resource_address);
         println!("account1_lsu_ amount {:?}", account1_lsu_balance);
+
+
+
+
+
 
         // *********** User 4 creates a buy order for 1000 XRD at 0.1% discount from face value ***********
         
@@ -185,6 +216,11 @@ impl TestEnvironment {
         println!("{:?}\n", receipt);
         receipt.expect_commit_success();
 
+
+
+
+
+
         // *********** User 5 creates a buy order for 1000 XRD at 1% discount from face value ***********
         
         let manifest = ManifestBuilder::new()
@@ -210,6 +246,10 @@ impl TestEnvironment {
         println!("{:?}\n", receipt);
         receipt.expect_commit_success();
 
+
+
+
+        
         // *********** User 6 creates a buy order for 1000 XRD at 5% discount from face value ***********
         
         let manifest = ManifestBuilder::new()
@@ -311,7 +351,11 @@ fn instantiate_test2() {
             "deposit_batch",
             manifest_args!(ManifestExpression::EntireWorktop),
         )
-        .deposit_batch(user_account1);
+        .call_method(
+            DynamicGlobalAddress::Static(GlobalAddress::new_or_panic(user_account1.into())),
+            "deposit_batch".to_string(),
+            manifest_args!(ManifestExpression::EntireWorktop)
+        );
         
     let receipt = ledger.execute_manifest(
         manifest.build(),
