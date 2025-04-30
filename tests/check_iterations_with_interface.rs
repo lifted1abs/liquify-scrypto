@@ -28,14 +28,7 @@ pub struct TestEnvironment {
 impl TestEnvironment {
     pub fn instantiate_test() -> Self {
 
-        let custom_genesis = CustomGenesis::default(
-            Epoch::of(1),
-            CustomGenesis::default_consensus_manager_config(),
-        );
-        let mut ledger = LedgerSimulatorBuilder::new()
-            .with_custom_genesis(custom_genesis)
-            .without_kernel_trace()
-            .build();
+        let mut ledger = LedgerSimulatorBuilder::new().without_kernel_trace().build();
 
         let (admin_public_key, _admin_private_key, admin_account_address) = ledger.new_allocated_account();
         let admin_account = Account { public_key: admin_public_key, account_address: admin_account_address };
@@ -70,7 +63,11 @@ impl TestEnvironment {
                 "instantiate_interface",
                 manifest_args!(),
             )
-            .deposit_batch(admin_account_address)
+            .call_method(
+                admin_account_address,
+                "deposit_batch",
+                manifest_args!(ManifestExpression::EntireWorktop),
+            )
             .build();
         let receipt = ledger.execute_manifest(
             manifest,
@@ -91,7 +88,11 @@ impl TestEnvironment {
                 "instantiate_liquify",
                 manifest_args!(),
             )
-            .deposit_batch(admin_account_address)
+            .call_method(
+                admin_account_address,
+                "deposit_batch",
+                manifest_args!(ManifestExpression::EntireWorktop),
+            )
             .build();
         let receipt = ledger.execute_manifest(
             manifest,
@@ -107,11 +108,6 @@ impl TestEnvironment {
 
         let manifest = ManifestBuilder::new()
             .lock_fee_from_faucet()
-            // .create_proof_from_account_of_amount(
-            //     admin_account_address, 
-            //     owner_badge,
-            //     1,
-            // )
             .call_method(
                 interface_component, 
                 "set_interface_target", 
@@ -147,7 +143,11 @@ impl TestEnvironment {
             .call_method_with_name_lookup(validator_address, "stake", |lookup| {
                 (lookup.bucket("xrd"),)
             })
-            .deposit_batch(user_account_address1)
+            .call_method(
+                user_account_address1,
+                "deposit_batch",
+                manifest_args!(ManifestExpression::EntireWorktop),
+            )
             .build();
 
         let receipt = ledger.execute_manifest(
@@ -169,7 +169,11 @@ impl TestEnvironment {
             .call_method_with_name_lookup(validator_address, "stake", |lookup| {
                 (lookup.bucket("xrd"),)
             })
-            .deposit_batch(user_account_address2)
+            .call_method(
+                user_account_address2,
+                "deposit_batch",
+                manifest_args!(ManifestExpression::EntireWorktop),
+            )
             .build();
 
         let receipt = ledger.execute_manifest(
@@ -191,7 +195,11 @@ impl TestEnvironment {
             .call_method_with_name_lookup(validator_address, "stake", |lookup| {
                 (lookup.bucket("xrd"),)
             })
-            .deposit_batch(user_account_address3)
+            .call_method(
+                user_account_address3,
+                "deposit_batch",
+                manifest_args!(ManifestExpression::EntireWorktop),
+            )
             .build();
 
         let receipt = ledger.execute_manifest(
@@ -236,641 +244,64 @@ impl TestEnvironment {
         println!("{:?}\n", receipt);
         receipt.expect_commit_success();
 
-        // *********** 1 xrd buy order at .1% discount: Order 1 ***********
-        
-        let manifest = ManifestBuilder::new()
-            .lock_fee_from_faucet()
-            .withdraw_from_account(user_account_address4, XRD, dec!(1))
-            .take_all_from_worktop(XRD, "xrd")
-            
-            .call_method_with_name_lookup(liquify_component, "add_liquidity", |lookup| {(
-                lookup.bucket("xrd"),
-                dec!("0.0010"),
-                true,
-            )})
-            .call_method(
-                user_account_address4,
-                "deposit_batch",
-                manifest_args!(ManifestExpression::EntireWorktop),
-            )
-            .build();
-        let receipt = ledger.execute_manifest(
-            manifest,
-            vec![NonFungibleGlobalId::from_public_key(&user_public_key4)],
-        );
-        println!("{:?}\n", receipt);
-        receipt.expect_commit_success();
 
-        // *********** 1 xrd buy order at .1% discount: Order 2 ***********
-        
-        let manifest = ManifestBuilder::new()
-            .lock_fee_from_faucet()
-            .withdraw_from_account(user_account_address4, XRD, dec!(1))
-            .take_all_from_worktop(XRD, "xrd")
-            
-            .call_method_with_name_lookup(liquify_component, "add_liquidity", |lookup| {(
-                lookup.bucket("xrd"),
-                dec!("0.0010"),
-                true,
-            )})
-            .call_method(
-                user_account_address4,
-                "deposit_batch",
-                manifest_args!(ManifestExpression::EntireWorktop),
-            )
-            .build();
-        let receipt = ledger.execute_manifest(
-            manifest,
-            vec![NonFungibleGlobalId::from_public_key(&user_public_key4)],
-        );
-        println!("{:?}\n", receipt);
-        receipt.expect_commit_success();
 
-        // *********** 1 xrd buy order at .1% discount: Order 3 ***********
-        
-        let manifest = ManifestBuilder::new()
-            .lock_fee_from_faucet()
-            .withdraw_from_account(user_account_address4, XRD, dec!(1))
-            .take_all_from_worktop(XRD, "xrd")
-            
-            .call_method_with_name_lookup(liquify_component, "add_liquidity", |lookup| {(
-                lookup.bucket("xrd"),
-                dec!("0.0010"),
-                true,
-            )})
-            .call_method(
-                user_account_address4,
-                "deposit_batch",
-                manifest_args!(ManifestExpression::EntireWorktop),
-            )
-            .build();
-        let receipt = ledger.execute_manifest(
-            manifest,
-            vec![NonFungibleGlobalId::from_public_key(&user_public_key4)],
-        );
-        println!("{:?}\n", receipt);
-        receipt.expect_commit_success();
 
-        // *********** 1 xrd buy order at .1% discount: Order 4 ***********
-        
-        let manifest = ManifestBuilder::new()
-            .lock_fee_from_faucet()
-            .withdraw_from_account(user_account_address4, XRD, dec!(1))
-            .take_all_from_worktop(XRD, "xrd")
-            
-            .call_method_with_name_lookup(liquify_component, "add_liquidity", |lookup| {(
-                lookup.bucket("xrd"),
-                dec!("0.0010"),
-                true,
-            )})
-            .call_method(
-                user_account_address4,
-                "deposit_batch",
-                manifest_args!(ManifestExpression::EntireWorktop),
-            )
-            .build();
-        let receipt = ledger.execute_manifest(
-            manifest,
-            vec![NonFungibleGlobalId::from_public_key(&user_public_key4)],
-        );
-        println!("{:?}\n", receipt);
-        receipt.expect_commit_success();
 
-        // *********** 1 xrd buy order at .1% discount: Order 5 ***********
-        
-        let manifest = ManifestBuilder::new()
-            .lock_fee_from_faucet()
-            .withdraw_from_account(user_account_address4, XRD, dec!(1))
-            .take_all_from_worktop(XRD, "xrd")
-            
-            .call_method_with_name_lookup(liquify_component, "add_liquidity", |lookup| {(
-                lookup.bucket("xrd"),
-                dec!("0.0010"),
-                true,
-            )})
-            .call_method(
-                user_account_address4,
-                "deposit_batch",
-                manifest_args!(ManifestExpression::EntireWorktop),
-            )
-            .build();
-        let receipt = ledger.execute_manifest(
-            manifest,
-            vec![NonFungibleGlobalId::from_public_key(&user_public_key4)],
-        );
-        println!("{:?}\n", receipt);
-        receipt.expect_commit_success();
 
-        // *********** 1 xrd buy order at .1% discount: Order 6 ***********
-        
-        let manifest = ManifestBuilder::new()
-            .lock_fee_from_faucet()
-            .withdraw_from_account(user_account_address4, XRD, dec!(1))
-            .take_all_from_worktop(XRD, "xrd")
-            
-            .call_method_with_name_lookup(liquify_component, "add_liquidity", |lookup| {(
-                lookup.bucket("xrd"),
-                dec!("0.0010"),
-                true,
-            )})
-            .call_method(
-                user_account_address4,
-                "deposit_batch",
-                manifest_args!(ManifestExpression::EntireWorktop),
-            )
-            .build();
-        let receipt = ledger.execute_manifest(
-            manifest,
-            vec![NonFungibleGlobalId::from_public_key(&user_public_key4)],
-        );
-        println!("{:?}\n", receipt);
-        receipt.expect_commit_success();
 
-        // *********** 1 xrd buy order at .1% discount: Order 7 ***********
-        
-        let manifest = ManifestBuilder::new()
-            .lock_fee_from_faucet()
-            .withdraw_from_account(user_account_address4, XRD, dec!(1))
-            .take_all_from_worktop(XRD, "xrd")
-            
-            .call_method_with_name_lookup(liquify_component, "add_liquidity", |lookup| {(
-                lookup.bucket("xrd"),
-                dec!("0.0010"),
-                true,
-            )})
-            .call_method(
-                user_account_address4,
-                "deposit_batch",
-                manifest_args!(ManifestExpression::EntireWorktop),
-            )
-            .build();
-        let receipt = ledger.execute_manifest(
-            manifest,
-            vec![NonFungibleGlobalId::from_public_key(&user_public_key4)],
-        );
-        println!("{:?}\n", receipt);
-        receipt.expect_commit_success();
 
-        // *********** 1 xrd buy order at .1% discount: Order 8 ***********
-        
-        let manifest = ManifestBuilder::new()
-            .lock_fee_from_faucet()
-            .withdraw_from_account(user_account_address4, XRD, dec!(1))
-            .take_all_from_worktop(XRD, "xrd")
-            
-            .call_method_with_name_lookup(liquify_component, "add_liquidity", |lookup| {(
-                lookup.bucket("xrd"),
-                dec!("0.0010"),
-                true,
-            )})
-            .call_method(
-                user_account_address4,
-                "deposit_batch",
-                manifest_args!(ManifestExpression::EntireWorktop),
-            )
-            .build();
-        let receipt = ledger.execute_manifest(
-            manifest,
-            vec![NonFungibleGlobalId::from_public_key(&user_public_key4)],
-        );
-        println!("{:?}\n", receipt);
-        receipt.expect_commit_success();
 
-        // *********** 1 xrd buy order at .1% discount: Order 9 ***********
-        
-        let manifest = ManifestBuilder::new()
-            .lock_fee_from_faucet()
-            .withdraw_from_account(user_account_address4, XRD, dec!(1))
-            .take_all_from_worktop(XRD, "xrd")
-            
-            .call_method_with_name_lookup(liquify_component, "add_liquidity", |lookup| {(
-                lookup.bucket("xrd"),
-                dec!("0.0010"),
-                true,
-            )})
-            .call_method(
-                user_account_address4,
-                "deposit_batch",
-                manifest_args!(ManifestExpression::EntireWorktop),
-            )
-            .build();
-        let receipt = ledger.execute_manifest(
-            manifest,
-            vec![NonFungibleGlobalId::from_public_key(&user_public_key4)],
-        );
-        println!("{:?}\n", receipt);
-        receipt.expect_commit_success();
 
-        // *********** 1 xrd buy order at .1% discount: Order 10 ***********
-        
-        let manifest = ManifestBuilder::new()
-            .lock_fee_from_faucet()
-            .withdraw_from_account(user_account_address4, XRD, dec!(1))
-            .take_all_from_worktop(XRD, "xrd")
-            
-            .call_method_with_name_lookup(liquify_component, "add_liquidity", |lookup| {(
-                lookup.bucket("xrd"),
-                dec!("0.0010"),
-                true,
-            )})
-            .call_method(
-                user_account_address4,
-                "deposit_batch",
-                manifest_args!(ManifestExpression::EntireWorktop),
-            )
-            .build();
-        let receipt = ledger.execute_manifest(
-            manifest,
-            vec![NonFungibleGlobalId::from_public_key(&user_public_key4)],
-        );
-        println!("{:?}\n", receipt);
-        receipt.expect_commit_success();
 
-        // *********** 1 xrd buy order at .1% discount: Order 11 ***********
-        
-        let manifest = ManifestBuilder::new()
-            .lock_fee_from_faucet()
-            .withdraw_from_account(user_account_address4, XRD, dec!(1))
-            .take_all_from_worktop(XRD, "xrd")
-            
-            .call_method_with_name_lookup(liquify_component, "add_liquidity", |lookup| {(
-                lookup.bucket("xrd"),
-                dec!("0.0010"),
-                true,
-            )})
-            .call_method(
-                user_account_address4,
-                "deposit_batch",
-                manifest_args!(ManifestExpression::EntireWorktop),
-            )
-            .build();
-        let receipt = ledger.execute_manifest(
-            manifest,
-            vec![NonFungibleGlobalId::from_public_key(&user_public_key4)],
-        );
-        println!("{:?}\n", receipt);
-        receipt.expect_commit_success();
 
-        // *********** 1 xrd buy order at .1% discount: Order 12 ***********
-        
-        let manifest = ManifestBuilder::new()
-            .lock_fee_from_faucet()
-            .withdraw_from_account(user_account_address4, XRD, dec!(1))
-            .take_all_from_worktop(XRD, "xrd")
-            
-            .call_method_with_name_lookup(liquify_component, "add_liquidity", |lookup| {(
-                lookup.bucket("xrd"),
-                dec!("0.0010"),
-                true,
-            )})
-            .call_method(
-                user_account_address4,
-                "deposit_batch",
-                manifest_args!(ManifestExpression::EntireWorktop),
-            )
-            .build();
-        let receipt = ledger.execute_manifest(
-            manifest,
-            vec![NonFungibleGlobalId::from_public_key(&user_public_key4)],
-        );
-        println!("{:?}\n", receipt);
-        receipt.expect_commit_success();
 
-        // *********** 1 xrd buy order at .1% discount: Order 13 ***********
-        
-        let manifest = ManifestBuilder::new()
-            .lock_fee_from_faucet()
-            .withdraw_from_account(user_account_address4, XRD, dec!(1))
-            .take_all_from_worktop(XRD, "xrd")
-            
-            .call_method_with_name_lookup(liquify_component, "add_liquidity", |lookup| {(
-                lookup.bucket("xrd"),
-                dec!("0.0010"),
-                true,
-            )})
-            .call_method(
-                user_account_address4,
-                "deposit_batch",
-                manifest_args!(ManifestExpression::EntireWorktop),
-            )
-            .build();
-        let receipt = ledger.execute_manifest(
-            manifest,
-            vec![NonFungibleGlobalId::from_public_key(&user_public_key4)],
-        );
-        println!("{:?}\n", receipt);
-        receipt.expect_commit_success();
 
-        // *********** 1 xrd buy order at .1% discount: Order 14 ***********
-        
-        let manifest = ManifestBuilder::new()
-            .lock_fee_from_faucet()
-            .withdraw_from_account(user_account_address4, XRD, dec!(1))
-            .take_all_from_worktop(XRD, "xrd")
-            
-            .call_method_with_name_lookup(liquify_component, "add_liquidity", |lookup| {(
-                lookup.bucket("xrd"),
-                dec!("0.0010"),
-                true,
-            )})
-            .call_method(
-                user_account_address4,
-                "deposit_batch",
-                manifest_args!(ManifestExpression::EntireWorktop),
-            )
-            .build();
-        let receipt = ledger.execute_manifest(
-            manifest,
-            vec![NonFungibleGlobalId::from_public_key(&user_public_key4)],
-        );
-        println!("{:?}\n", receipt);
-        receipt.expect_commit_success();
 
-        // *********** 1 xrd buy order at .1% discount: Order 15 ***********
-        
-        let manifest = ManifestBuilder::new()
-            .lock_fee_from_faucet()
-            .withdraw_from_account(user_account_address4, XRD, dec!(1))
-            .take_all_from_worktop(XRD, "xrd")
-            
-            .call_method_with_name_lookup(liquify_component, "add_liquidity", |lookup| {(
-                lookup.bucket("xrd"),
-                dec!("0.0010"),
-                true,
-            )})
-            .call_method(
-                user_account_address4,
-                "deposit_batch",
-                manifest_args!(ManifestExpression::EntireWorktop),
-            )
-            .build();
-        let receipt = ledger.execute_manifest(
-            manifest,
-            vec![NonFungibleGlobalId::from_public_key(&user_public_key4)],
-        );
-        println!("{:?}\n", receipt);
-        receipt.expect_commit_success();
-        
-        // *********** 1 xrd buy order at .1% discount: Order 16 ***********
-        
-        let manifest = ManifestBuilder::new()
-            .lock_fee_from_faucet()
-            .withdraw_from_account(user_account_address4, XRD, dec!(1))
-            .take_all_from_worktop(XRD, "xrd")
-            
-            .call_method_with_name_lookup(liquify_component, "add_liquidity", |lookup| {(
-                lookup.bucket("xrd"),
-                dec!("0.0010"),
-                true,
-            )})
-            .call_method(
-                user_account_address4,
-                "deposit_batch",
-                manifest_args!(ManifestExpression::EntireWorktop),
-            )
-            .build();
-        let receipt = ledger.execute_manifest(
-            manifest,
-            vec![NonFungibleGlobalId::from_public_key(&user_public_key4)],
-        );
-        println!("{:?}\n", receipt);
-        receipt.expect_commit_success();
 
-        // *********** 1 xrd buy order at .1% discount: Order 17 ***********
-        
-        let manifest = ManifestBuilder::new()
-            .lock_fee_from_faucet()
-            .withdraw_from_account(user_account_address4, XRD, dec!(1))
-            .take_all_from_worktop(XRD, "xrd")
-            
-            .call_method_with_name_lookup(liquify_component, "add_liquidity", |lookup| {(
-                lookup.bucket("xrd"),
-                dec!("0.0010"),
-                true,
-            )})
-            .call_method(
-                user_account_address4,
-                "deposit_batch",
-                manifest_args!(ManifestExpression::EntireWorktop),
-            )
-            .build();
-        let receipt = ledger.execute_manifest(
-            manifest,
-            vec![NonFungibleGlobalId::from_public_key(&user_public_key4)],
-        );
-        println!("{:?}\n", receipt);
-        receipt.expect_commit_success();
 
-        // *********** 1 xrd buy order at .1% discount: Order 18 ***********
-        
-        let manifest = ManifestBuilder::new()
-            .lock_fee_from_faucet()
-            .withdraw_from_account(user_account_address4, XRD, dec!(1))
-            .take_all_from_worktop(XRD, "xrd")
-            
-            .call_method_with_name_lookup(liquify_component, "add_liquidity", |lookup| {(
-                lookup.bucket("xrd"),
-                dec!("0.0010"),
-                true,
-            )})
-            .call_method(
-                user_account_address4,
-                "deposit_batch",
-                manifest_args!(ManifestExpression::EntireWorktop),
-            )
-            .build();
-        let receipt = ledger.execute_manifest(
-            manifest,
-            vec![NonFungibleGlobalId::from_public_key(&user_public_key4)],
-        );
-        println!("{:?}\n", receipt);
-        receipt.expect_commit_success();
 
-        // *********** 1 xrd buy order at .1% discount: Order 19 ***********
-        
-        let manifest = ManifestBuilder::new()
-            .lock_fee_from_faucet()
-            .withdraw_from_account(user_account_address4, XRD, dec!(1))
-            .take_all_from_worktop(XRD, "xrd")
-            
-            .call_method_with_name_lookup(liquify_component, "add_liquidity", |lookup| {(
-                lookup.bucket("xrd"),
-                dec!("0.0010"),
-                true,
-            )})
-            .call_method(
-                user_account_address4,
-                "deposit_batch",
-                manifest_args!(ManifestExpression::EntireWorktop),
-            )
-            .build();
-        let receipt = ledger.execute_manifest(
-            manifest,
-            vec![NonFungibleGlobalId::from_public_key(&user_public_key4)],
-        );
-        println!("{:?}\n", receipt);
-        receipt.expect_commit_success();
 
-        // *********** 1 xrd buy order at .1% discount: Order 20 ***********
-        
-        let manifest = ManifestBuilder::new()
-            .lock_fee_from_faucet()
-            .withdraw_from_account(user_account_address4, XRD, dec!(1))
-            .take_all_from_worktop(XRD, "xrd")
-            
-            .call_method_with_name_lookup(liquify_component, "add_liquidity", |lookup| {(
-                lookup.bucket("xrd"),
-                dec!("0.0010"),
-                true,
-            )})
-            .call_method(
-                user_account_address4,
-                "deposit_batch",
-                manifest_args!(ManifestExpression::EntireWorktop),
-            )
-            .build();
-        let receipt = ledger.execute_manifest(
-            manifest,
-            vec![NonFungibleGlobalId::from_public_key(&user_public_key4)],
-        );
-        println!("{:?}\n", receipt);
-        receipt.expect_commit_success();
 
-        // *********** 1 xrd buy order at .1% discount: Order 21 ***********
-        
-        let manifest = ManifestBuilder::new()
-            .lock_fee_from_faucet()
-            .withdraw_from_account(user_account_address4, XRD, dec!(1))
-            .take_all_from_worktop(XRD, "xrd")
-            
-            .call_method_with_name_lookup(liquify_component, "add_liquidity", |lookup| {(
-                lookup.bucket("xrd"),
-                dec!("0.0010"),
-                true,
-            )})
-            .call_method(
-                user_account_address4,
-                "deposit_batch",
-                manifest_args!(ManifestExpression::EntireWorktop),
-            )
-            .build();
-        let receipt = ledger.execute_manifest(
-            manifest,
-            vec![NonFungibleGlobalId::from_public_key(&user_public_key4)],
-        );
-        println!("{:?}\n", receipt);
-        receipt.expect_commit_success();
 
-        // *********** 1 xrd buy order at .1% discount: Order 22 ***********
-        
-        let manifest = ManifestBuilder::new()
-            .lock_fee_from_faucet()
-            .withdraw_from_account(user_account_address4, XRD, dec!(1))
-            .take_all_from_worktop(XRD, "xrd")
-            
-            .call_method_with_name_lookup(liquify_component, "add_liquidity", |lookup| {(
-                lookup.bucket("xrd"),
-                dec!("0.0010"),
-                true,
-            )})
-            .call_method(
-                user_account_address4,
-                "deposit_batch",
-                manifest_args!(ManifestExpression::EntireWorktop),
-            )
-            .build();
-        let receipt = ledger.execute_manifest(
-            manifest,
-            vec![NonFungibleGlobalId::from_public_key(&user_public_key4)],
-        );
-        println!("{:?}\n", receipt);
-        receipt.expect_commit_success();
 
-        // *********** 1 xrd buy order at .1% discount: Order 23 ***********
-        
-        let manifest = ManifestBuilder::new()
-            .lock_fee_from_faucet()
-            .withdraw_from_account(user_account_address4, XRD, dec!(1))
-            .take_all_from_worktop(XRD, "xrd")
-            
-            .call_method_with_name_lookup(liquify_component, "add_liquidity", |lookup| {(
-                lookup.bucket("xrd"),
-                dec!("0.0010"),
-                true,
-            )})
-            .call_method(
-                user_account_address4,
-                "deposit_batch",
-                manifest_args!(ManifestExpression::EntireWorktop),
-            )
-            .build();
-        let receipt = ledger.execute_manifest(
-            manifest,
-            vec![NonFungibleGlobalId::from_public_key(&user_public_key4)],
-        );
-        println!("{:?}\n", receipt);
-        receipt.expect_commit_success();
 
-        // *********** 1 xrd buy order at .1% discount: Order 24 ***********
-        
-        let manifest = ManifestBuilder::new()
-            .lock_fee_from_faucet()
-            .withdraw_from_account(user_account_address4, XRD, dec!(1))
-            .take_all_from_worktop(XRD, "xrd")
-            
-            .call_method_with_name_lookup(liquify_component, "add_liquidity", |lookup| {(
-                lookup.bucket("xrd"),
-                dec!("0.0010"),
-                true,
-            )})
-            .call_method(
-                user_account_address4,
-                "deposit_batch",
-                manifest_args!(ManifestExpression::EntireWorktop),
-            )
-            .build();
-        let receipt = ledger.execute_manifest(
-            manifest,
-            vec![NonFungibleGlobalId::from_public_key(&user_public_key4)],
-        );
-        println!("{:?}\n", receipt);
-        receipt.expect_commit_success();
 
-        // *********** 1 xrd buy order at .1% discount: Order 25 ***********
-        
-        let manifest = ManifestBuilder::new()
-            .lock_fee_from_faucet()
-            .withdraw_from_account(user_account_address4, XRD, dec!(1))
-            .take_all_from_worktop(XRD, "xrd")
-            
-            .call_method_with_name_lookup(liquify_component, "add_liquidity", |lookup| {(
-                lookup.bucket("xrd"),
-                dec!("0.0010"),
-                true,
-            )})
-            .call_method(
-                user_account_address4,
-                "deposit_batch",
-                manifest_args!(ManifestExpression::EntireWorktop),
-            )
-            .build();
-        let receipt = ledger.execute_manifest(
-            manifest,
-            vec![NonFungibleGlobalId::from_public_key(&user_public_key4)],
-        );
-        println!("{:?}\n", receipt);
-        receipt.expect_commit_success();
 
-        // *********** 1 xrd buy order at .1% discount: Order 26 ***********
-        
-        let manifest = ManifestBuilder::new()
+
+        // *********** Loop to add liquidity ***********
+        for _ in 0..30 {
+            let manifest = ManifestBuilder::new()
+                .lock_fee_from_faucet()
+                .withdraw_from_account(user_account_address4, XRD, dec!(10))
+                .take_all_from_worktop(XRD, "xrd")
+                
+                .call_method_with_name_lookup(liquify_component, "add_liquidity", |lookup| {(
+                    lookup.bucket("xrd"),
+                    dec!("0.010"),
+                    false,
+                )})
+                .call_method(
+                    user_account_address4,
+                    "deposit_batch",
+                    manifest_args!(ManifestExpression::EntireWorktop),
+                )
+                .build();
+            let receipt = ledger.execute_manifest(
+                manifest,
+                vec![NonFungibleGlobalId::from_public_key(&user_public_key4)],
+            );
+            println!("{:?}\n", receipt);
+            receipt.expect_commit_success();
+
+            let manifest = ManifestBuilder::new()
             .lock_fee_from_faucet()
-            .withdraw_from_account(user_account_address4, XRD, dec!(1))
+            .withdraw_from_account(user_account_address4, XRD, dec!(10))
             .take_all_from_worktop(XRD, "xrd")
             
             .call_method_with_name_lookup(liquify_component, "add_liquidity", |lookup| {(
                 lookup.bucket("xrd"),
-                dec!("0.0010"),
+                dec!("0.020"),
                 true,
             )})
             .call_method(
@@ -885,6 +316,30 @@ impl TestEnvironment {
         );
         println!("{:?}\n", receipt);
         receipt.expect_commit_success();
+        
+        let manifest = ManifestBuilder::new()
+            .lock_fee_from_faucet()
+            .withdraw_from_account(user_account_address4, XRD, dec!(10))
+            .take_all_from_worktop(XRD, "xrd")
+            
+            .call_method_with_name_lookup(liquify_component, "add_liquidity", |lookup| {(
+                lookup.bucket("xrd"),
+                dec!("0.025"),
+                true,
+            )})
+            .call_method(
+                user_account_address4,
+                "deposit_batch",
+                manifest_args!(ManifestExpression::EntireWorktop),
+            )
+            .build();
+        let receipt = ledger.execute_manifest(
+            manifest,
+            vec![NonFungibleGlobalId::from_public_key(&user_public_key4)],
+        );
+        println!("{:?}\n", receipt);
+        receipt.expect_commit_success();
+        }
         
 
 
@@ -961,14 +416,14 @@ fn instantiate_test2() {
         .take_all_from_worktop(lsu_resource_address, "lsu")
         .call_method_with_name_lookup(liquify_interface_component, "liquify_unstake", |lookup| {
             (lookup.bucket("lsu"),
+            30u8
         )
         })
         .call_method(
             user_account1,
             "deposit_batch",
             manifest_args!(ManifestExpression::EntireWorktop),
-        )
-        .deposit_batch(user_account1);
+        );
         
     let receipt = ledger.execute_manifest(
         manifest.build(),
