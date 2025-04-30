@@ -99,12 +99,13 @@ mod interface_module {
             (liquidity_bucket, liquidity_receipt_bucket)
         }
 
-        pub fn liquify_unstake(&mut self, lsu_bucket: FungibleBucket) -> (Bucket, FungibleBucket) {
+        pub fn liquify_unstake(&mut self, lsu_bucket: FungibleBucket, max_iterations: u8) -> (Bucket, FungibleBucket) {
 
             let liquify_component: Global<Liquify> = self.active_liquify_component.unwrap().into();
             
-            let (xrd_bucket, lsu_bucket) = liquify_component.liquify_unstake(lsu_bucket);
-
+            // Pass through the user-provided max_iterations
+            let (xrd_bucket, lsu_bucket) = liquify_component.liquify_unstake(lsu_bucket, max_iterations);
+        
             (xrd_bucket, lsu_bucket)
         }
 

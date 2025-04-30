@@ -78,6 +78,7 @@ mod liquify_module {
             set_component_status => restrict_to: [owner];
             set_platform_fee => restrict_to: [owner];
             collect_platform_fees => restrict_to: [owner];
+            set_max_liquidity_iter => restrict_to: [owner];
             set_max_fills_to_collect => restrict_to: [owner];
             set_minimum_liquidity => restrict_to: [owner];
             set_receipt_image_url => restrict_to: [owner];
@@ -102,6 +103,7 @@ mod liquify_module {
         discounts: Vec<Decimal>,  // List of discounts available
         platform_fee: Decimal,  // Fee charged to market sellers
         fee_vault: Vault,
+        max_liquidity_iter: u64,  // Maximum number of liquidity nfts to iterate through in a single transaction
         minimum_liquidity: Decimal,  // Minimum liquidity required to add a new buy order
         receipt_image_url: Url,
     }
@@ -178,6 +180,7 @@ mod liquify_module {
                 order_fill_counter: 1,
                 platform_fee: dec!(0.00), // 0% fee
                 fee_vault: Vault::new(XRD),
+                max_liquidity_iter: 28,
                 minimum_liquidity: dec!(1000),
                 receipt_image_url: Url::of("https://bafybeib7cokm27lwwkunaibn7hczijn3ztkypbzttmt7hymaov44s5e5sm.ipfs.w3s.link/liquify2.png"),
             }
@@ -210,6 +213,7 @@ mod liquify_module {
                     set_component_status => Free, updatable;
                     set_platform_fee => Free, updatable;
                     collect_platform_fees => Free, updatable;
+                    set_max_liquidity_iter => Free, updatable;
                     set_max_fills_to_collect => Free, updatable;
                     set_minimum_liquidity => Free, updatable;
                     set_receipt_image_url => Free, updatable;
@@ -385,88 +389,36 @@ mod liquify_module {
         /// * A `Bucket` containing remaining XRD that was deposited in the liquidity pool.
         /// * A `Bucket` containing any remaining LSUs that were not "unstaked" in case the transaction either hits an iteration
         /// limit or the liquidity pool is empty.
-        pub fn liquify_unstake(&mut self, lsu_bucket: FungibleBucket, max_iterations: u8) -> (Bucket, FungibleBucket) {
+        pub fn liquify_unstake(&mut self, mut lsu_bucket: FungibleBucket) -> (Bucket, FungibleBucket) {
+
             // Ensure the bucket contains a valid LSU
             assert!(self.validate_lsu(lsu_bucket.resource_address()), "Bucket must contain a native Radix Validator LSU");
 
-            // For sequential order processing, we create a vector of keys by iterating through the buy list
-            let mut order_keys = Vec::new();
-            let mut iter_count = 0;
-            
-            self.buy_list.range_mut(0..u128::MAX).for_each(|(avl_key, _global_id, _)| {
-                if iter_count >= max_iterations as usize {
-                    return scrypto_avltree::IterMutControl::Break;
-                }
-                
-                order_keys.push(*avl_key);
-                iter_count += 1;
-                
-                scrypto_avltree::IterMutControl::Continue
-            });
-            
-            // Use the shared internal method with the sequential keys
-            self.process_unstake(lsu_bucket, order_keys)
-        }
-
-        /// Allows users to get an amount of XRD for a given amount of LSUs.
-        /// 
-        /// Executes the process of iterating through specified liquidity receipts to "unstake" a bucket of LSUs. 
-        /// This method is constrained by the `max_liquidity_iter` variable.  When calling the component directly, this method
-        /// can handle up to 29 liquidity receipts.  If called through the interface component, it can handle up to 28 receipts.
-        /// 
-        /// # Arguments
-        /// * `lsu_bucket`: A `Bucket` containing LSUs to be "unstaked" for XRD.
-        ///
-        /// # Returns
-        /// * A `Bucket` containing remaining XRD that was deposited in the liquidity pool.
-        /// * A `Bucket` containing any remaining LSUs that were not "unstaked" in case the transaction either hits an iteration
-        /// limit or the liquidity pool is empty.
-        pub fn liquify_unstake_off_ledger(&mut self, lsu_bucket: FungibleBucket, order_keys: Vec<u128>) -> (Bucket, FungibleBucket) {
-            // Ensure the bucket contains a valid LSU
-            assert!(self.validate_lsu(lsu_bucket.resource_address()), "Bucket must contain a native Radix Validator LSU");
-
-            // Use the shared internal method with the user-provided keys
-            self.process_unstake(lsu_bucket, order_keys)
-        }
-
-        /// Internal shared method to process unstaking with a provided set of order keys
-        /// 
-        /// This method contains the core logic for processing LSU unstaking, accepting
-        /// a vector of order keys to determine which liquidity to use and in what order.
-        /// 
-        /// # Arguments
-        /// * `mut lsu_bucket`: A mutable FungibleBucket containing LSUs to be unstaked
-        /// * `order_keys`: A vector of u128 keys identifying which liquidity receipts to use
-        ///
-        /// # Returns
-        /// * A tuple containing (XRD bucket, remaining LSU bucket)
-        fn process_unstake(&mut self, mut lsu_bucket: FungibleBucket, order_keys: Vec<u128>) -> (Bucket, FungibleBucket) {
             let mut xrd_bucket: Bucket = Bucket::new(XRD); // Initialize an empty bucket to collect XRD
             let mut validator = self.get_validator_from_lsu(lsu_bucket.resource_address()); // Get the validator for the LSU being sold
             let mut redemption_value = validator.get_redemption_value(lsu_bucket.amount());
-
-            let mut updates = vec![];
+        
+            let mut updates: HashMap<NonFungibleLocalId, (LiquidityDetails, FungibleBucket, Decimal, Decimal)> = HashMap::new();
             let mut lsu_sold_total = Decimal::ZERO; // Track the total amount of LSUs actually sold
+            let mut iteration_count = 0; // Track the number of iterations
+            
+            // Iterate over the buy list, starting from the lowest discount
+            self.buy_list.range_mut(0..u128::MAX).for_each(|(avl_key, global_id, _)| {
 
-            for key in order_keys {
-                let global_id_option = self.buy_list.get(&key);
-                
-                // Skip if the key doesn't exist in the buy list
-                if global_id_option.is_none() {
-                    continue;
+                if iteration_count >= self.max_liquidity_iter {
+                    return scrypto_avltree::IterMutControl::Break;
                 }
-                
-                let global_id = global_id_option.unwrap();
+
                 let local_id = global_id.local_id();
                 let data: LiquidityDetails = self.liquidity_receipt.get_non_fungible_data(&local_id);
                 let mut xrd_remaining = data.xrd_remaining;
-
+        
                 let lsu_amount_to_take;
                 let fill_amount;
 
                 let discount = data.discount;
-                let discounted_xrd_value_of_lsus: Decimal = redemption_value * (1 - discount);
-
+                let discounted_xrd_value_of_lsus = redemption_value * (1 - discount);
+        
                 // Calculate how much LSU to take and how much XRD to fill
                 if discounted_xrd_value_of_lsus <= xrd_remaining {
                     // take remainder of LSUs
@@ -476,36 +428,45 @@ mod liquify_module {
                     // Update the buy order remaining amount and break the loop as we are done
                     xrd_remaining -= fill_amount;
                     redemption_value = Decimal::ZERO; // To break out of the loop
+
                 } else {
+
                     // take LSU amount proportional to the remaining XRD in buy order
                     let max_xrd_for_lsu = redemption_value * (1 - discount);
                     lsu_amount_to_take = lsu_bucket.amount() * (xrd_remaining / max_xrd_for_lsu);
+
                     fill_amount = xrd_remaining;
 
                     redemption_value = redemption_value * ((lsu_bucket.amount() - lsu_amount_to_take) / lsu_bucket.amount());
                     xrd_remaining = Decimal::ZERO; // No liquidity remaining in this order
                 }
-
+        
                 let lsu_taken: FungibleBucket = lsu_bucket.take(lsu_amount_to_take); // Take the calculated amount of LSUs
                 let xrd_funds = self.xrd_liquidity.take(fill_amount); // Take the corresponding amount of XRD
                 xrd_bucket.put(xrd_funds); // Add the XRD to the xrd_bucket
 
                 lsu_sold_total += lsu_amount_to_take; // Track total LSUs actually sold
+        
+                updates.insert(local_id.clone(), (data.clone(), lsu_taken, fill_amount, xrd_remaining));
 
-                updates.push((local_id.clone(), data.clone(), lsu_taken, fill_amount, xrd_remaining));
 
+                iteration_count += 1;
+    
                 if redemption_value.is_zero() {
-                    break;
+                    return scrypto_avltree::IterMutControl::Break;
                 }
-            }
-
-            // Apply updates after processing all provided keys
-            for (local_id, data, lsu_taken, fill_amount, new_remaining) in updates {
+        
+                scrypto_avltree::IterMutControl::Continue
+            });
+        
+            // Apply updates after the mutable borrow on `self.buy_list` is done
+            for (local_id, (data, lsu_taken, fill_amount, new_remaining)) in updates {
+            
                 // Update the total liquidity at the correct position in the liquidity index
                 let index_usize = (data.discount / dec!(0.00025)).checked_floor().unwrap().to_string().parse::<usize>().unwrap();
                 let currently_liquidity_at_discount = self.liquidity_index[index_usize];
                 self.liquidity_index[index_usize] = currently_liquidity_at_discount - fill_amount.clone();
-
+        
                 // Reconstruct avl_key from local_id and discount, then remove the key if the order is fully filled
                 let discount_u64 = (data.discount * dec!(10000)).checked_floor().unwrap().to_string().parse::<u64>().unwrap();
                 let local_id_u64 = match local_id.clone() {
@@ -521,16 +482,18 @@ mod liquify_module {
                 let fill_percent: Decimal = (dec!(1) - (new_remaining / data.total_xrd_amount)) * dec!(100);
                 self.liquidity_receipt.update_non_fungible_data(&local_id, "fill_percent", fill_percent);
                 
+            
                 self.liquidity_receipt.update_non_fungible_data(&local_id, "xrd_remaining", new_remaining);
+
                 let mut new_fills_to_collect = data.fills_to_collect;
                 new_fills_to_collect += 1;
                 self.liquidity_receipt.update_non_fungible_data(&local_id, "fills_to_collect", new_fills_to_collect);
-
+        
                 let order_fill_key = CombinedKey::new(local_id_u64, self.order_fill_counter).key;
                 self.order_fill_counter += 1;
                 
                 if data.auto_unstake {
-                    let unstake_nft = validator.unstake(lsu_taken);
+                    let unstake_nft: NonFungibleBucket = validator.unstake(lsu_taken);
                     let unstake_nft_data = UnstakeNFTOrLSU::UnstakeNFT(UnstakeNFTData {
                         resource_address: unstake_nft.resource_address(),
                         id: unstake_nft.non_fungible_local_id(),
@@ -552,8 +515,152 @@ mod liquify_module {
             // Update the total XRD volume after processing
             self.total_xrd_volume += xrd_bucket.amount();
             self.total_xrd_locked -= xrd_bucket.amount();
+        
+            let fee_bucket =  xrd_bucket.take(xrd_bucket.amount().clone().checked_mul(self.platform_fee).unwrap());
+            self.fee_vault.put(fee_bucket);
 
-            let fee_bucket = xrd_bucket.take(xrd_bucket.amount().clone().checked_mul(self.platform_fee).unwrap());
+            // Return the filled XRD bucket and the remaining LSU bucket
+            (xrd_bucket, lsu_bucket)
+        }
+
+        /// Allows users to get an amount of XRD for a given amount of LSUs.
+        /// 
+        /// Executes the process of iterating through specified liquidity receipts to "unstake" a bucket of LSUs. 
+        /// This method is constrained by the `max_liquidity_iter` variable.  When calling the component directly, this method
+        /// can handle up to 29 liquidity receipts.  If called through the interface component, it can handle up to 28 receipts.
+        /// 
+        /// # Arguments
+        /// * `lsu_bucket`: A `Bucket` containing LSUs to be "unstaked" for XRD.
+        ///
+        /// # Returns
+        /// * A `Bucket` containing remaining XRD that was deposited in the liquidity pool.
+        /// * A `Bucket` containing any remaining LSUs that were not "unstaked" in case the transaction either hits an iteration
+        /// limit or the liquidity pool is empty.
+        pub fn liquify_unstake_off_ledger(&mut self, mut lsu_bucket: FungibleBucket, order_keys: Vec<u128>) -> (Bucket, FungibleBucket) {
+
+            // Ensure the bucket contains a valid LSU
+            assert!(self.validate_lsu(lsu_bucket.resource_address()), "Bucket must contain a native Radix Validator LSU");
+
+            // Ensure iterations dont encounter costing limits
+            assert!(u64::try_from(order_keys.len()).unwrap() <= self.max_liquidity_iter, "Too many receipts to fill in a single transaction");
+
+            let mut xrd_bucket: Bucket = Bucket::new(XRD); // Initialize an empty bucket to collect XRD
+            let mut validator = self.get_validator_from_lsu(lsu_bucket.resource_address()); // Get the validator for the LSU being sold
+            let mut redemption_value = validator.get_redemption_value(lsu_bucket.amount());
+        
+            let mut updates = vec![];
+            let mut lsu_sold_total = Decimal::ZERO; // Track the total amount of LSUs actually sold
+
+            for key in order_keys {
+
+                let global_id = self.buy_list.get(&key).unwrap();
+                let local_id = global_id.local_id();
+                let data: LiquidityDetails = self.liquidity_receipt.get_non_fungible_data(&local_id);
+                let mut xrd_remaining = data.xrd_remaining;
+        
+                let lsu_amount_to_take;
+                let fill_amount;
+
+                let discount = data.discount;
+                let discounted_xrd_value_of_lsus: Decimal = redemption_value * (1 - discount);
+        
+                // Calculate how much LSU to take and how much XRD to fill
+                if discounted_xrd_value_of_lsus <= xrd_remaining {
+                    
+                    // take remainder of LSUs
+                    lsu_amount_to_take = lsu_bucket.amount(); 
+                    fill_amount = discounted_xrd_value_of_lsus; 
+
+                    // Update the buy order remaining amount and break the loop as we are done
+                    xrd_remaining -= fill_amount;
+                    redemption_value = Decimal::ZERO; // To break out of the loop
+
+                } else {
+
+                    // take LSU amount proportional to the remaining XRD in buy order
+                    let max_xrd_for_lsu = redemption_value * (1 - discount);
+                    lsu_amount_to_take = lsu_bucket.amount() * (xrd_remaining / max_xrd_for_lsu);
+                    fill_amount = xrd_remaining;
+
+                    
+                    redemption_value = redemption_value * ((lsu_bucket.amount() - lsu_amount_to_take) / lsu_bucket.amount());
+                    xrd_remaining = Decimal::ZERO; // No liquidity remaining in this order
+                }
+        
+                let lsu_taken: FungibleBucket = lsu_bucket.take(lsu_amount_to_take); // Take the calculated amount of LSUs
+                let xrd_funds = self.xrd_liquidity.take(fill_amount); // Take the corresponding amount of XRD
+                xrd_bucket.put(xrd_funds); // Add the XRD to the xrd_bucket
+
+                lsu_sold_total += lsu_amount_to_take; // Track total LSUs actually sold
+        
+                updates.push((local_id.clone(), data.clone(), lsu_taken, fill_amount, xrd_remaining));
+    
+                if redemption_value.is_zero() {
+                    break;
+                }
+        
+                continue;
+            }
+        
+            // Apply updates after the mutable borrow on `self.buy_list` is done
+            for (local_id, data, lsu_taken, fill_amount, new_remaining) in updates {
+            
+                // Update the total liquidity at the correct position in the liquidity index
+                let index_usize = (data.discount / dec!(0.00025)).checked_floor().unwrap().to_string().parse::<usize>().unwrap();
+                let currently_liquidity_at_discount = self.liquidity_index[index_usize];
+                self.liquidity_index[index_usize] = currently_liquidity_at_discount - fill_amount.clone();
+        
+                // Reconstruct avl_key from local_id and discount, then remove the key if the order is fully filled
+                let discount_u64 = (data.discount * dec!(10000)).checked_floor().unwrap().to_string().parse::<u64>().unwrap();
+                let local_id_u64 = match local_id.clone() {
+                    NonFungibleLocalId::Integer(i) => i.value(),
+                    _ => 0,
+                };
+                
+                if new_remaining == dec!(0) {
+                    let avl_key = CombinedKey::new(discount_u64, local_id_u64).key;
+                    self.buy_list.remove(&avl_key);
+                }
+
+                let fill_percent: Decimal = (dec!(1) - (new_remaining / data.total_xrd_amount)) * dec!(100);
+                self.liquidity_receipt.update_non_fungible_data(&local_id, "fill_percent", fill_percent);
+                
+                self.liquidity_receipt.update_non_fungible_data(&local_id, "xrd_remaining", new_remaining);
+                let mut new_fills_to_collect = data.fills_to_collect;
+                new_fills_to_collect += 1;
+                self.liquidity_receipt.update_non_fungible_data(&local_id, "fills_to_collect", new_fills_to_collect);
+        
+                let order_fill_key = CombinedKey::new(local_id_u64, self.order_fill_counter).key;
+                self.order_fill_counter += 1;
+                
+                if data.auto_unstake {
+
+                    let unstake_nft = validator.unstake(lsu_taken);
+                    let unstake_nft_data = UnstakeNFTOrLSU::UnstakeNFT(UnstakeNFTData {
+                        resource_address: unstake_nft.resource_address(),
+                        id: unstake_nft.non_fungible_local_id(),
+                    });
+                    self.order_fill_tree.insert(order_fill_key, unstake_nft_data.clone());
+                    self.ensure_user_vault_exists(unstake_nft.resource_address());
+                    self.component_vaults.get_mut(&unstake_nft.resource_address()).unwrap().as_non_fungible().put(unstake_nft);
+
+                } else {
+
+                    let lsu_data = UnstakeNFTOrLSU::LSU(LSUData {
+                        resource_address: lsu_taken.resource_address(),
+                        amount: lsu_taken.amount(),
+                    });
+                    self.order_fill_tree.insert(order_fill_key, lsu_data);
+                    self.ensure_user_vault_exists(lsu_taken.resource_address());
+                    self.component_vaults.get_mut(&lsu_taken.resource_address()).unwrap().as_fungible().put(lsu_taken);
+                }
+            }
+
+            // Update the total XRD volume after processing
+            self.total_xrd_volume += xrd_bucket.amount();
+            self.total_xrd_locked -= xrd_bucket.amount();
+        
+            let fee_bucket =  xrd_bucket.take(xrd_bucket.amount().clone().checked_mul(self.platform_fee).unwrap());
             self.fee_vault.put(fee_bucket);
             
             // Return the filled XRD bucket and the remaining LSU bucket
@@ -709,7 +816,7 @@ mod liquify_module {
             self.fee_vault.take_all()
         }
         
-        /// Allows protocol owner to set component status to active or inactive in terms of accepting new liquidity.
+        /// Allows protocol owner to collect any fees that have been generated by the platform.
         /// 
         /// # Requires
         /// * Proof of owner badge
@@ -723,18 +830,33 @@ mod liquify_module {
             self.component_status = status;
         }
 
-        /// Allows protocol owner to set fees for the platform.
+        /// Allows protocol owner to collect any fees that have been generated by the platform.
         /// 
         /// # Requires
         /// * Proof of owner badge
         /// 
         /// # Arguments
-        /// * 'Decimal' - A decimal percentage fee to take.
+        /// * 'bool' - A boolean value to set the status of the component: true for active, false for inactive.
         ///
         /// # Returns
         /// * None
         pub fn set_platform_fee(&mut self, fee: Decimal) {
             self.platform_fee = fee;
+        }
+
+        /// Allows protocol owner to set the maximum number of liquidity receipts that can be processed in a single transaction.
+        /// Current logic allows for up to 29 receipts to be processed in a single transaction directly or 28 through the interface.
+        /// 
+        /// # Requires
+        /// * Proof of owner badge
+        /// 
+        /// # Arguments
+        /// * 'u64' - An integer number of receipts to process in a single transaction.
+        ///
+        /// # Returns
+        /// * None
+        pub fn set_max_liquidity_iter(&mut self, max: u64) {
+            self.max_liquidity_iter = max;
         }
 
         /// Allows protocol owner to set the maximum number of fills that can be processed in a single transaction.
@@ -770,6 +892,7 @@ mod liquify_module {
         pub fn set_receipt_image_url(&mut self, url: String) {
             self.receipt_image_url = Url::of(url);
         }
+ 
 
         fn ensure_user_vault_exists(&mut self, resource: ResourceAddress) {
 

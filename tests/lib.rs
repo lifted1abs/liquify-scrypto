@@ -341,9 +341,10 @@ fn instantiate_test2() {
             dec!(5000)   
         )
         .take_all_from_worktop(lsu_resource_address, "lsu")
-        .call_method_with_name_lookup(liquify_component, "market_sell", |lookup| {
+        .call_method_with_name_lookup(liquify_component, "liquify_unstake", |lookup| {
             (lookup.bucket("lsu"),
-            dec!(0)
+                30u8 // max_iterations
+            
         )
         })
         .call_method(
