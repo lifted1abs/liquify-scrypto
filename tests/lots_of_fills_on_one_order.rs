@@ -27,14 +27,7 @@ pub struct TestEnvironment {
 impl TestEnvironment {
     pub fn instantiate_test() -> Self {
 
-        let custom_genesis = CustomGenesis::default(
-            Epoch::of(1),
-            CustomGenesis::default_consensus_manager_config(),
-        );
-        let mut ledger = LedgerSimulatorBuilder::new()
-            .with_custom_genesis(custom_genesis)
-            .without_kernel_trace()
-            .build();
+        let mut ledger = LedgerSimulatorBuilder::new().without_kernel_trace().build();
 
         let (admin_public_key, _admin_private_key, admin_account_address) = ledger.new_allocated_account();
         let admin_account = Account { public_key: admin_public_key, account_address: admin_account_address };
@@ -70,7 +63,11 @@ impl TestEnvironment {
                 "instantiate_liquify",
                 manifest_args!(),
             )
-            .deposit_batch(admin_account_address)
+            .call_method(
+                admin_account_address,
+                "deposit_batch",
+                manifest_args!(ManifestExpression::EntireWorktop),
+            )
             .build();
         let receipt = ledger.execute_manifest(
             manifest,
@@ -97,7 +94,11 @@ impl TestEnvironment {
             .call_method_with_name_lookup(validator_address, "stake", |lookup| {
                 (lookup.bucket("xrd"),)
             })
-            .deposit_batch(user_account_address1)
+            .call_method(
+                user_account_address1,
+                "deposit_batch",
+                manifest_args!(ManifestExpression::EntireWorktop),
+            )
             .build();
 
         let receipt = ledger.execute_manifest(
@@ -119,7 +120,11 @@ impl TestEnvironment {
             .call_method_with_name_lookup(validator_address, "stake", |lookup| {
                 (lookup.bucket("xrd"),)
             })
-            .deposit_batch(user_account_address2)
+            .call_method(
+                user_account_address2,
+                "deposit_batch",
+                manifest_args!(ManifestExpression::EntireWorktop),
+            )
             .build();
 
         let receipt = ledger.execute_manifest(
@@ -141,7 +146,11 @@ impl TestEnvironment {
             .call_method_with_name_lookup(validator_address, "stake", |lookup| {
                 (lookup.bucket("xrd"),)
             })
-            .deposit_batch(user_account_address3)
+            .call_method(
+                user_account_address3,
+                "deposit_batch",
+                manifest_args!(ManifestExpression::EntireWorktop),
+            )
             .build();
 
         let receipt = ledger.execute_manifest(
@@ -340,8 +349,7 @@ fn instantiate_test2() {
                 user_account1,
                 "deposit_batch",
                 manifest_args!(ManifestExpression::EntireWorktop),
-            )
-            .deposit_batch(user_account1);
+            );
         
         let receipt = ledger.execute_manifest(
             manifest.build(),
