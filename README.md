@@ -124,6 +124,14 @@ Forwards all arguments and returns directly to/from the core Liquify component
 
 iterations:
 
-off ledger, no interface, auto unstake = true, max = 29
-off ledger, no interface, auto unstake = false, max = 42
+market_sell_off_ledger, no interface, auto unstake = true, max = 29
+market_sell_off_ledger, no interface, auto unstake = false, max = 42
+
+
+market_sell, no interface, auto unstake = true, max = 28
+market_sell, no interface, auto unstake = false, max = 41
+
+
+market_sell, with interface, auto unstake = true, max = 26
+market_sell, with interface, auto unstake = false, max = 39
 

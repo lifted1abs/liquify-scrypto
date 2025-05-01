@@ -205,7 +205,7 @@ impl TestEnvironment {
                 .call_method_with_name_lookup(liquify_component, "add_liquidity", |lookup| {(
                     lookup.bucket("xrd"),
                     dec!("0.010"),
-                    true,
+                    false,
                 )})
                 .call_method(
                     user_account_address4,
@@ -228,7 +228,7 @@ impl TestEnvironment {
             .call_method_with_name_lookup(liquify_component, "add_liquidity", |lookup| {(
                 lookup.bucket("xrd"),
                 dec!("0.020"),
-                true,
+                false,
             )})
             .call_method(
                 user_account_address4,
@@ -251,7 +251,7 @@ impl TestEnvironment {
             .call_method_with_name_lookup(liquify_component, "add_liquidity", |lookup| {(
                 lookup.bucket("xrd"),
                 dec!("0.025"),
-                true,
+                false,
             )})
             .call_method(
                 user_account_address4,

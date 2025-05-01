@@ -118,11 +118,11 @@ mod interface_module {
             (xrd_bucket, lsu_bucket)
         }
 
-        pub fn collect_fills(&mut self, liquidity_receipt_bucket: Bucket) -> (Vec<Bucket>, Bucket) {
+        pub fn collect_fills(&mut self, liquidity_receipt_bucket: Bucket, number_of_fills_to_collect: u64) -> (Vec<Bucket>, Bucket) {
             
             let liquify_component: Global<Liquify> = self.active_liquify_component.unwrap().into();
             
-            let (bucket_vec, liquidity_receipt_bucket) = liquify_component.collect_fills(liquidity_receipt_bucket);
+            let (bucket_vec, liquidity_receipt_bucket) = liquify_component.collect_fills(liquidity_receipt_bucket, number_of_fills_to_collect);
         
             (bucket_vec, liquidity_receipt_bucket)
         }

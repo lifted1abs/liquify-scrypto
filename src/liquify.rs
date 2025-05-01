@@ -573,7 +573,7 @@ mod liquify_module {
         /// # Returns
         /// * A `Vec<Bucket>` containing LSUs or stake claim NFTs from the unstaking process.
         /// * A `Bucket` containing the original liquidity receipt NFTs with updated data.
-        pub fn collect_fills(&mut self, liquidity_receipt_bucket: Bucket) -> (Vec<Bucket>, Bucket) {
+        pub fn collect_fills(&mut self, liquidity_receipt_bucket: Bucket, number_of_fills_to_collect: u64) -> (Vec<Bucket>, Bucket) {
             
             // Ensure bucket contains a real liquidity receipt
             assert!(

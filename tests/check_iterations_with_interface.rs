@@ -279,7 +279,7 @@ impl TestEnvironment {
                 .call_method_with_name_lookup(liquify_component, "add_liquidity", |lookup| {(
                     lookup.bucket("xrd"),
                     dec!("0.010"),
-                    false,
+                    true,
                 )})
                 .call_method(
                     user_account_address4,
@@ -416,7 +416,7 @@ fn instantiate_test2() {
         .take_all_from_worktop(lsu_resource_address, "lsu")
         .call_method_with_name_lookup(liquify_interface_component, "liquify_unstake", |lookup| {
             (lookup.bucket("lsu"),
-            30u8
+            26u8
         )
         })
         .call_method(

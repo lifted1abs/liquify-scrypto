@@ -331,7 +331,7 @@ fn instantiate_test2() {
 
 
     // can handle up to 85 at a time, any more will be saved for the next time user collects fills
-    for _ in 0..89 {
+    for _ in 0..120 {
 
         // *********** User 1 sells 10 LSUs at market rate LSUs ***********
         let manifest = ManifestBuilder::new()
@@ -343,7 +343,9 @@ fn instantiate_test2() {
             )
             .take_all_from_worktop(lsu_resource_address, "lsu")
             .call_method_with_name_lookup(liquify_component, "liquify_unstake", |lookup| {
-                (lookup.bucket("lsu"),)
+                (lookup.bucket("lsu"),
+                28u8
+                )
             })
             .call_method(
                 user_account1,
