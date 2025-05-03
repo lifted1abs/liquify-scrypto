@@ -377,7 +377,9 @@ fn instantiate_test2() {
         .take_all_from_worktop(liquidity_receipt, "liquidity_receipt_bucket")
         
         .call_method_with_name_lookup(liquify_component, "collect_fills", |lookup| {
-            (lookup.bucket("liquidity_receipt_bucket"),)
+            (lookup.bucket("liquidity_receipt_bucket"),
+            80u64
+        )
         })
         .call_method(
             user_account4,

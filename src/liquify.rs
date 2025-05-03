@@ -78,7 +78,6 @@ mod liquify_module {
             set_component_status => restrict_to: [owner];
             set_platform_fee => restrict_to: [owner];
             collect_platform_fees => restrict_to: [owner];
-            set_max_fills_to_collect => restrict_to: [owner];
             set_minimum_liquidity => restrict_to: [owner];
             set_receipt_image_url => restrict_to: [owner];
         }
@@ -90,7 +89,6 @@ mod liquify_module {
         xrd_liquidity: Vault, // holds all XRD liquidity
         liquidity_receipt: NonFungibleResourceManager,
         liquidity_receipt_counter: u64,
-        max_fills_to_collect: u64, // Maximum number of fills to collect in a single transaction
         buy_list: AvlTree<u128, NonFungibleGlobalId>, // Data structure for all liquidity receipts
         order_fill_tree: AvlTree<u128, UnstakeNFTOrLSU>,  // Data structure for all fills to collect
         component_vaults: KeyValueStore<ResourceAddress, Vault>, // Vaults that store all LSUs and unstake nfts for users
@@ -166,7 +164,6 @@ mod liquify_module {
                 xrd_liquidity: Vault::new(XRD),
                 liquidity_receipt,
                 liquidity_receipt_counter: 1,
-                max_fills_to_collect: 85,
                 buy_list: AvlTree::new(),
                 order_fill_tree: AvlTree::new(),
                 component_vaults: KeyValueStore::new(),
@@ -210,7 +207,6 @@ mod liquify_module {
                     set_component_status => Free, updatable;
                     set_platform_fee => Free, updatable;
                     collect_platform_fees => Free, updatable;
-                    set_max_fills_to_collect => Free, updatable;
                     set_minimum_liquidity => Free, updatable;
                     set_receipt_image_url => Free, updatable;
                 }
@@ -559,16 +555,16 @@ mod liquify_module {
             // Return the filled XRD bucket and the remaining LSU bucket
             (xrd_bucket, lsu_bucket)
         }
-
+        
         /// Allows user to collect fills from liquidity receipt NFTs that have been used in the "unstake" process.
         /// 
         /// This method takes a bucket of liquidity receipt NFTs and returns either LSUs or stake claim NFTs depending
-        /// on whether or not the auto unstake feature was selected for the liquidity receipt. This method
-        /// is constrained by the `max_fills_to_collect` variable.  Currently this variable is set to 85.  More than 85 fills surpasses the
-        /// costing limits of a single transaction.
+        /// on whether or not the auto unstake feature was selected for the liquidity receipt.
         /// 
         /// # Arguments
         /// * `liquidity_receipt_bucket`: A `Bucket` containing the liquidity receipt NFTs representing liquidity to remove.
+        /// * `number_of_fills_to_collect`: A `u64` that specifies the maximum number of fill iterations to process in this transaction.
+        ///   This prevents transaction failures when collecting large numbers of fills.
         ///
         /// # Returns
         /// * A `Vec<Bucket>` containing LSUs or stake claim NFTs from the unstaking process.
@@ -580,42 +576,47 @@ mod liquify_module {
                 liquidity_receipt_bucket.resource_address() == self.liquidity_receipt.address(),
                 "Bucket must contain Liquify liquidity receipts NFT(s)"
             );
-        
+
             let mut updates = vec![];  // Collecting updates to apply after processing
             let mut bucket_vec: Vec<Bucket> = Vec::new();  // Collected buckets for returning unstake NFTs or LSUs
             let mut collect_counter: u64 = 0;  // Total number of fills collected
-        
+
             // Iterate over the non-fungible IDs in the liquidity_receipt_bucket (loop over the NFTs)
             for order_id in liquidity_receipt_bucket.as_non_fungible().non_fungible_local_ids() {
                 
                 // Retrieve order data
                 let data: LiquidityDetails = self.liquidity_receipt.get_non_fungible_data(&order_id);
-        
+
                 // Skip this order if no fills are available to collect
-                if data.fills_to_collect == 0 || collect_counter >= self.max_fills_to_collect {
+                if data.fills_to_collect == 0 {
                     continue;
                 }
-        
+
+                // Break out if we've reached the maximum iterations
+                if collect_counter >= number_of_fills_to_collect {
+                    break;
+                }
+
                 // Convert order ID to u64
                 let order_id_u64 = match order_id.clone() {
                     NonFungibleLocalId::Integer(i) => i.value(),
                     _ => 0,
                 };
-        
+
                 // Calculate the start and end keys directly based on the order ID
                 let start_key = CombinedKey::new(order_id_u64, 1).key;
                 let end_key = CombinedKey::new(order_id_u64, u64::MAX).key;
-        
+
                 // Loop over the AVL tree to collect fills for this order
                 let mut fills_collected_for_this_order: u64 = 0;
-        
+
                 self.order_fill_tree.range_mut(start_key..=end_key).for_each(
                     |(avl_key, unstake_nft_or_lsu, _next_key): (&u128, &mut UnstakeNFTOrLSU, Option<u128>)| {
-                        // Break if we've collected the maximum allowed number of fills
-                        if collect_counter >= self.max_fills_to_collect {
+                        // Break if we've reached the maximum iterations
+                        if collect_counter >= number_of_fills_to_collect {
                             return scrypto_avltree::IterMutControl::Break;
                         }
-        
+
                         // Does this order fill represent an unstake NFT or an LSU?
                         match unstake_nft_or_lsu {
                             // If this fill is an LSU, collect it and add to the bucket vector
@@ -627,7 +628,7 @@ mod liquify_module {
                                 lsu_bucket.put(lsu_vault.take(lsu_amount));
                                 bucket_vec.push(lsu_bucket);
                             }
-        
+
                             // If this fill is an unstake NFT, collect it and add to the bucket vector
                             UnstakeNFTOrLSU::UnstakeNFT(unstake_nft_data) => {
                                 let mut unstake_nft_bucket = Bucket::new(unstake_nft_data.resource_address);
@@ -637,33 +638,40 @@ mod liquify_module {
                                 bucket_vec.push(unstake_nft_bucket);
                             }
                         }
-        
+
                         // Mark this fill for removal from the AVL tree and update the collect count
                         updates.push((*avl_key, order_id.clone(), data.fills_to_collect - 1));
                         fills_collected_for_this_order += 1;
                         collect_counter += 1;
-        
+
                         scrypto_avltree::IterMutControl::Continue
                     },
                 );
-        
+
                 // Update the order with how many fills were collected for this specific NFT
                 let new_fills_to_collect = data.fills_to_collect - fills_collected_for_this_order;
-                updates.push((start_key, order_id.clone(), new_fills_to_collect));
+                
+                // Only add this update if we actually collected fills for this order
+                if fills_collected_for_this_order > 0 {
+                    updates.push((start_key, order_id.clone(), new_fills_to_collect));
+                }
             }
-        
+
             // Remove all collected fills from the AVL tree and update the buy order data
             for (avl_key_to_remove, order_id, new_fills_to_collect) in updates {
+                // Only remove from the tree if it's a real key (not a placeholder for count updates)
                 self.order_fill_tree.remove(&avl_key_to_remove);
+                
+                // Update the fills to collect count for this order
                 self.liquidity_receipt.update_non_fungible_data(&order_id, "fills_to_collect", new_fills_to_collect);
-        
+
                 // Update the order status if needed (if all fills collected and no remaining amount)
                 let data: LiquidityDetails = self.liquidity_receipt.get_non_fungible_data(&order_id);
-                if data.xrd_remaining == dec!(0) && data.fills_to_collect == 0 {
+                if data.xrd_remaining == dec!(0) && new_fills_to_collect == 0 {
                     self.liquidity_receipt.update_non_fungible_data(&order_id, "liquidity_status", LiquidityStatus::Closed);
                 }
             }
-        
+
             // Return the collected fills and the original buy order bucket
             (bucket_vec, liquidity_receipt_bucket)
         }
@@ -735,21 +743,6 @@ mod liquify_module {
         /// * None
         pub fn set_platform_fee(&mut self, fee: Decimal) {
             self.platform_fee = fee;
-        }
-
-        /// Allows protocol owner to set the maximum number of fills that can be processed in a single transaction.
-        /// Current logic allows for up to 85 fills to be collected in a single transaction.
-        /// 
-        /// # Requires
-        /// * Proof of owner badge
-        /// 
-        /// # Arguments
-        /// * 'u64' - An integer number of fills to collect in a single transaction.
-        ///
-        /// # Returns
-        /// * None
-        pub fn set_max_fills_to_collect(&mut self, max: u64) {
-            self.max_fills_to_collect = max;
         }
 
         /// Allows protocol owner to set the minimum deposit amount for liquidity.  The higher the minimum, the larger
