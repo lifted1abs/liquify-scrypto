@@ -1,0 +1,893 @@
+Minting owner badge
+Your resource was created! 🎉
+Transaction ID: txid_tdx_2_104fqrrnjp4kvet6d60e7udawcpvrm47mtskpn7ktyw3n66davgasxn4fhh
+Resource address: resource_tdx_2_1t44x9flkp8np5epw0x6jw9y29pesrpjzwenjsh59trrj6zn6k62tcz
+
+Your package was submitted! 🎉
+Transaction ID: txid_tdx_2_1vmhspe74ymfmhngm8x2d9mm8swstxuy65dah44u7wtxhkq6s0vpszgq8j6
+Package address: package_tdx_2_1p4d2qqnk8yvctk6smwuadp6hawzyd4l0rssz8q4nt9ddlpjx2z68fk
+
+
+CALL_FUNCTION
+    Address("package_tdx_2_1p4d2qqnk8yvctk6smwuadp6hawzyd4l0rssz8q4nt9ddlpjx2z68fk")
+    "Liquify"
+    "instantiate_liquify"
+;
+CALL_METHOD
+    Address("account_tdx_2_12yqz8dp4gu5wn70k66qqncuhh0hny77tag3ync44w0yrshpxumrj55")
+    "deposit_batch"
+    Expression("ENTIRE_WORKTOP")
+;
+
+Your transaction was submitted! 🎉
+Tx ID
+txid_tdx_2_1yxa85uxffngdg92eudxy0tg65uzgukuzvg59nrf0g243yynp9s7s72qwny
+
+// liquify component address
+component_tdx_2_1cpkayez9079yy3hjlxy2pvlh9dtw2wc2vvaj4vzelc0s8ww3kxpgck
+// liquify owner badge address
+resource_tdx_2_1t4duqau5gax6v8mvfv3kj5asyx09cc60sv0mrdq4xy63hxdf8f7qel
+// liquidity receipt address
+resource_tdx_2_1n2gf2753hzvkkgxmhre63423j593rypaypazxslsswleq5s3jzg8tr
+
+
+
+// stokenet test
+
+// how to add liquidity
+// add 30 5000 xrd buy orders with varying discounts
+// small marketsell into first order
+// cancel that order and another to demo multiple cancels at a time
+// marketsell into them clearing out 25
+    // can iterate through 25 orders that auto unstake, 35? orders that do not auto unstake but have set a hard cap at 26 so no costing limits should be hit
+// then clear the remaining 4
+// collect fills at at the same time to demo multiple collects
+// add 500k xrd liquidity at .5% discount
+// sell into them and show what the expected outcome is for decent liquidity
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// add multiliquidity
+
+CALL_METHOD
+    Address("account_tdx_2_12yqz8dp4gu5wn70k66qqncuhh0hny77tag3ync44w0yrshpxumrj55")
+    "withdraw"
+    Address("resource_tdx_2_1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxtfd2jc") 
+    Decimal("10000") 
+;
+TAKE_ALL_FROM_WORKTOP
+    Address("resource_tdx_2_1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxtfd2jc")
+    Bucket("xrd_bucket1")
+;
+CALL_METHOD
+    Address("component_tdx_2_1cpkayez9079yy3hjlxy2pvlh9dtw2wc2vvaj4vzelc0s8ww3kxpgck")
+    "add_liquidity"
+    Bucket("xrd_bucket1")
+    Decimal("0.0025")
+    true
+;
+CALL_METHOD
+    Address("account_tdx_2_12yqz8dp4gu5wn70k66qqncuhh0hny77tag3ync44w0yrshpxumrj55")
+    "withdraw"
+    Address("resource_tdx_2_1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxtfd2jc") 
+    Decimal("10000") 
+;
+TAKE_ALL_FROM_WORKTOP
+    Address("resource_tdx_2_1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxtfd2jc")
+    Bucket("xrd_bucket2")
+;
+CALL_METHOD
+    Address("component_tdx_2_1cpkayez9079yy3hjlxy2pvlh9dtw2wc2vvaj4vzelc0s8ww3kxpgck")
+    "add_liquidity"
+    Bucket("xrd_bucket2")
+    Decimal("0.005")
+    true
+;
+CALL_METHOD
+    Address("account_tdx_2_12yqz8dp4gu5wn70k66qqncuhh0hny77tag3ync44w0yrshpxumrj55")
+    "withdraw"
+    Address("resource_tdx_2_1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxtfd2jc") 
+    Decimal("10000") 
+;
+TAKE_ALL_FROM_WORKTOP
+    Address("resource_tdx_2_1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxtfd2jc")
+    Bucket("xrd_bucket3")
+;
+CALL_METHOD
+    Address("component_tdx_2_1cpkayez9079yy3hjlxy2pvlh9dtw2wc2vvaj4vzelc0s8ww3kxpgck")
+    "add_liquidity"
+    Bucket("xrd_bucket3")
+    Decimal("0.0075")
+    true
+;
+CALL_METHOD
+    Address("account_tdx_2_12yqz8dp4gu5wn70k66qqncuhh0hny77tag3ync44w0yrshpxumrj55")
+    "withdraw"
+    Address("resource_tdx_2_1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxtfd2jc") 
+    Decimal("10000") 
+;
+TAKE_ALL_FROM_WORKTOP
+    Address("resource_tdx_2_1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxtfd2jc")
+    Bucket("xrd_bucket4")
+;
+CALL_METHOD
+    Address("component_tdx_2_1cpkayez9079yy3hjlxy2pvlh9dtw2wc2vvaj4vzelc0s8ww3kxpgck")
+    "add_liquidity"
+    Bucket("xrd_bucket4")
+    Decimal("0.01")
+    true
+;
+
+CALL_METHOD
+    Address("account_tdx_2_12yqz8dp4gu5wn70k66qqncuhh0hny77tag3ync44w0yrshpxumrj55")
+    "withdraw"
+    Address("resource_tdx_2_1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxtfd2jc") 
+    Decimal("10000") 
+;
+TAKE_ALL_FROM_WORKTOP
+    Address("resource_tdx_2_1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxtfd2jc")
+    Bucket("xrd_bucket5")
+;
+CALL_METHOD
+    Address("component_tdx_2_1cpkayez9079yy3hjlxy2pvlh9dtw2wc2vvaj4vzelc0s8ww3kxpgck")
+    "add_liquidity"
+    Bucket("xrd_bucket5")
+    Decimal("0.0125")
+    true
+;
+CALL_METHOD
+    Address("account_tdx_2_12yqz8dp4gu5wn70k66qqncuhh0hny77tag3ync44w0yrshpxumrj55")
+    "withdraw"
+    Address("resource_tdx_2_1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxtfd2jc") 
+    Decimal("10000") 
+;
+TAKE_ALL_FROM_WORKTOP
+    Address("resource_tdx_2_1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxtfd2jc")
+    Bucket("xrd_bucket6")
+;
+CALL_METHOD
+    Address("component_tdx_2_1cpkayez9079yy3hjlxy2pvlh9dtw2wc2vvaj4vzelc0s8ww3kxpgck")
+    "add_liquidity"
+    Bucket("xrd_bucket6")
+    Decimal("0.015")
+    true
+;
+
+CALL_METHOD
+    Address("account_tdx_2_12yqz8dp4gu5wn70k66qqncuhh0hny77tag3ync44w0yrshpxumrj55")
+    "withdraw"
+    Address("resource_tdx_2_1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxtfd2jc") 
+    Decimal("10000") 
+;
+TAKE_ALL_FROM_WORKTOP
+    Address("resource_tdx_2_1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxtfd2jc")
+    Bucket("xrd_bucket7")
+;
+CALL_METHOD
+    Address("component_tdx_2_1cpkayez9079yy3hjlxy2pvlh9dtw2wc2vvaj4vzelc0s8ww3kxpgck")
+    "add_liquidity"
+    Bucket("xrd_bucket7")
+    Decimal("0.0175")
+    true
+;
+
+CALL_METHOD
+    Address("account_tdx_2_12yqz8dp4gu5wn70k66qqncuhh0hny77tag3ync44w0yrshpxumrj55")
+    "withdraw"
+    Address("resource_tdx_2_1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxtfd2jc") 
+    Decimal("10000") 
+;
+TAKE_ALL_FROM_WORKTOP
+    Address("resource_tdx_2_1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxtfd2jc")
+    Bucket("xrd_bucket8")
+;
+CALL_METHOD
+    Address("component_tdx_2_1cpkayez9079yy3hjlxy2pvlh9dtw2wc2vvaj4vzelc0s8ww3kxpgck")
+    "add_liquidity"
+    Bucket("xrd_bucket8")
+    Decimal("0.02")
+    true
+;
+
+CALL_METHOD
+    Address("account_tdx_2_12yqz8dp4gu5wn70k66qqncuhh0hny77tag3ync44w0yrshpxumrj55")
+    "withdraw"
+    Address("resource_tdx_2_1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxtfd2jc") 
+    Decimal("10000") 
+;
+TAKE_ALL_FROM_WORKTOP
+    Address("resource_tdx_2_1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxtfd2jc")
+    Bucket("xrd_bucket9")
+;
+CALL_METHOD
+    Address("component_tdx_2_1cpkayez9079yy3hjlxy2pvlh9dtw2wc2vvaj4vzelc0s8ww3kxpgck")
+    "add_liquidity"
+    Bucket("xrd_bucket9")
+    Decimal("0.0225")
+    true
+;
+
+CALL_METHOD
+    Address("account_tdx_2_12yqz8dp4gu5wn70k66qqncuhh0hny77tag3ync44w0yrshpxumrj55")
+    "withdraw"
+    Address("resource_tdx_2_1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxtfd2jc") 
+    Decimal("10000") 
+;
+TAKE_ALL_FROM_WORKTOP
+    Address("resource_tdx_2_1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxtfd2jc")
+    Bucket("xrd_bucket10")
+;
+CALL_METHOD
+    Address("component_tdx_2_1cpkayez9079yy3hjlxy2pvlh9dtw2wc2vvaj4vzelc0s8ww3kxpgck")
+    "add_liquidity"
+    Bucket("xrd_bucket10")
+    Decimal("0.025")
+    true
+;
+CALL_METHOD
+    Address("account_tdx_2_12yqz8dp4gu5wn70k66qqncuhh0hny77tag3ync44w0yrshpxumrj55")
+    "deposit_batch"
+    Expression("ENTIRE_WORKTOP")
+;
+
+Your transaction was submitted! 🎉
+Tx ID
+txid_tdx_2_17z57x2y8lcekj2hzhjc2xx5frf32v88g9k9ca74cfgmzsrw05f4qk6pnwj
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+add_liquidity -> 1000 xrd at 1% discount
+
+CALL_METHOD
+    Address("account_tdx_2_12yqz8dp4gu5wn70k66qqncuhh0hny77tag3ync44w0yrshpxumrj55")
+    "withdraw"
+    Address("resource_tdx_2_1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxtfd2jc") 
+    Decimal("1000") 
+;
+TAKE_ALL_FROM_WORKTOP
+    Address("resource_tdx_2_1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxtfd2jc")
+    Bucket("xrd_bucket")
+;
+CALL_METHOD
+    Address("component_tdx_2_1cpkayez9079yy3hjlxy2pvlh9dtw2wc2vvaj4vzelc0s8ww3kxpgck")
+    "add_liquidity"
+    Bucket("xrd_bucket")
+    Decimal("0.01")
+    false
+;
+CALL_METHOD
+    Address("account_tdx_2_12yqz8dp4gu5wn70k66qqncuhh0hny77tag3ync44w0yrshpxumrj55")
+    "deposit_batch"
+    Expression("ENTIRE_WORKTOP")
+;
+
+Your transaction was submitted! 🎉
+Tx ID
+txid_tdx_2_1g5g5nwvruzqnw3vg5c626evafkmma5muc807xuunk9azlmfgfehs9m8f6f
+
+
+market_sell => PUBLIC
+
+CALL_METHOD
+    Address("account_tdx_2_12yqz8dp4gu5wn70k66qqncuhh0hny77tag3ync44w0yrshpxumrj55")
+    "withdraw"
+    Address("resource_tdx_2_1t5wwm4n6etcd6pxxfgnr5d0v9vd06qkruu74vx4tneu2jp7k27v3fm") 
+    Decimal("100") 
+;
+TAKE_ALL_FROM_WORKTOP
+    Address("resource_tdx_2_1t5wwm4n6etcd6pxxfgnr5d0v9vd06qkruu74vx4tneu2jp7k27v3fm")
+    Bucket("lsu_bucket")
+;
+CALL_METHOD
+    Address("component_tdx_2_1cpkayez9079yy3hjlxy2pvlh9dtw2wc2vvaj4vzelc0s8ww3kxpgck")
+    "market_sell"
+    Bucket("lsu_bucket")
+    Decimal("0.0")
+;
+CALL_METHOD
+    Address("account_tdx_2_12yqz8dp4gu5wn70k66qqncuhh0hny77tag3ync44w0yrshpxumrj55")
+    "deposit_batch"
+    Expression("ENTIRE_WORKTOP")
+;
+
+Your transaction was submitted! 🎉
+Tx ID
+txid_tdx_2_1tcqq46m2x564zzuce7lmh4pccrrzpex4tsy5fwtkrv7ne8ll2cuses59ln
+
+
+collect fills from nft 1
+
+CALL_METHOD
+    Address("account_tdx_2_12yqz8dp4gu5wn70k66qqncuhh0hny77tag3ync44w0yrshpxumrj55")
+    "withdraw_non_fungibles"
+    Address("resource_tdx_2_1n2gf2753hzvkkgxmhre63423j593rypaypazxslsswleq5s3jzg8tr")
+    Array<NonFungibleLocalId>(
+        NonFungibleLocalId("#1#")
+    )
+;
+TAKE_ALL_FROM_WORKTOP
+    Address("resource_tdx_2_1n2gf2753hzvkkgxmhre63423j593rypaypazxslsswleq5s3jzg8tr")
+    Bucket("liquidity_receipt_bucket")
+;
+CALL_METHOD
+    Address("component_tdx_2_1cpkayez9079yy3hjlxy2pvlh9dtw2wc2vvaj4vzelc0s8ww3kxpgck")
+    "collect_fills"
+    Bucket("liquidity_receipt_bucket")
+;
+CALL_METHOD
+    Address("account_tdx_2_12yqz8dp4gu5wn70k66qqncuhh0hny77tag3ync44w0yrshpxumrj55")
+    "deposit_batch"
+    Expression("ENTIRE_WORKTOP")
+;
+
+
+Your transaction was submitted! 🎉
+Tx ID
+txid_tdx_2_18dv4dtae3ency0x0mtjrhq6ucwk32rjzphjvj0ax9gv4qpmht3usvu8d7d
+
+
+remove_liquidity => PUBLIC
+
+CALL_METHOD
+    Address("account_tdx_2_12yqz8dp4gu5wn70k66qqncuhh0hny77tag3ync44w0yrshpxumrj55")
+    "withdraw_non_fungibles"
+    Address("resource_tdx_2_1n2gf2753hzvkkgxmhre63423j593rypaypazxslsswleq5s3jzg8tr")
+    Array<NonFungibleLocalId>(
+        NonFungibleLocalId("#1#")
+    )
+;
+TAKE_ALL_FROM_WORKTOP
+    Address("resource_tdx_2_1n2gf2753hzvkkgxmhre63423j593rypaypazxslsswleq5s3jzg8tr")
+    Bucket("liquidity_receipt_bucket")
+;
+CALL_METHOD
+    Address("component_tdx_2_1cpkayez9079yy3hjlxy2pvlh9dtw2wc2vvaj4vzelc0s8ww3kxpgck")
+    "remove_liquidity"
+    Bucket("liquidity_receipt_bucket")
+;
+CALL_METHOD
+    Address("account_tdx_2_12yqz8dp4gu5wn70k66qqncuhh0hny77tag3ync44w0yrshpxumrj55")
+    "deposit_batch"
+    Expression("ENTIRE_WORKTOP")
+;
+
+
+
+
+
+
+
+
+
+market sell and clear all 3k add_liquidity
+
+CALL_METHOD
+    Address("account_tdx_2_12yqz8dp4gu5wn70k66qqncuhh0hny77tag3ync44w0yrshpxumrj55")
+    "withdraw"
+    Address("resource_tdx_2_1t5wwm4n6etcd6pxxfgnr5d0v9vd06qkruu74vx4tneu2jp7k27v3fm") 
+    Decimal("10000") 
+;
+TAKE_ALL_FROM_WORKTOP
+    Address("resource_tdx_2_1t5wwm4n6etcd6pxxfgnr5d0v9vd06qkruu74vx4tneu2jp7k27v3fm")
+    Bucket("lsu_bucket")
+;
+CALL_METHOD
+    Address("component_tdx_2_1cpkayez9079yy3hjlxy2pvlh9dtw2wc2vvaj4vzelc0s8ww3kxpgck")
+    "market_sell"
+    Bucket("lsu_bucket")
+;
+CALL_METHOD
+    Address("account_tdx_2_12yqz8dp4gu5wn70k66qqncuhh0hny77tag3ync44w0yrshpxumrj55")
+    "deposit_batch"
+    Expression("ENTIRE_WORKTOP")
+;
+
+Your transaction was submitted! 🎉
+Tx ID
+txid_tdx_2_1n0jte5a94m3pu3u9n9p0r4e627jzl03lfgl2yu7uzk0zgut3cs6s03dc9g
+
+
+
+collect fills from nft 1
+
+CALL_METHOD
+    Address("account_tdx_2_12yqz8dp4gu5wn70k66qqncuhh0hny77tag3ync44w0yrshpxumrj55")
+    "withdraw_non_fungibles"
+    Address("resource_tdx_2_1n2gf2753hzvkkgxmhre63423j593rypaypazxslsswleq5s3jzg8tr")
+    Array<NonFungibleLocalId>(
+        NonFungibleLocalId("#1#")
+    )
+;
+TAKE_ALL_FROM_WORKTOP
+    Address("resource_tdx_2_1n2gf2753hzvkkgxmhre63423j593rypaypazxslsswleq5s3jzg8tr")
+    Bucket("liquidity_receipt_bucket")
+;
+CALL_METHOD
+    Address("component_tdx_2_1cpkayez9079yy3hjlxy2pvlh9dtw2wc2vvaj4vzelc0s8ww3kxpgck")
+    "collect_fills"
+    Bucket("liquidity_receipt_bucket")
+;
+CALL_METHOD
+    Address("account_tdx_2_12yqz8dp4gu5wn70k66qqncuhh0hny77tag3ync44w0yrshpxumrj55")
+    "deposit_batch"
+    Expression("ENTIRE_WORKTOP")
+;
+
+Your transaction was submitted! 🎉
+Tx ID
+txid_tdx_2_1r9u6xawrk75zk9has95vp4qzngrqxenp77hj2w0e5y9s48wqaa3qwxwess
+
+collect fills from nft 2
+
+CALL_METHOD
+    Address("account_tdx_2_12yqz8dp4gu5wn70k66qqncuhh0hny77tag3ync44w0yrshpxumrj55")
+    "withdraw_non_fungibles"
+    Address("resource_tdx_2_1n2gf2753hzvkkgxmhre63423j593rypaypazxslsswleq5s3jzg8tr")
+    Array<NonFungibleLocalId>(
+        NonFungibleLocalId("#2#")
+    )
+;
+TAKE_ALL_FROM_WORKTOP
+    Address("resource_tdx_2_1n2gf2753hzvkkgxmhre63423j593rypaypazxslsswleq5s3jzg8tr")
+    Bucket("liquidity_receipt_bucket")
+;
+CALL_METHOD
+    Address("component_tdx_2_1cpkayez9079yy3hjlxy2pvlh9dtw2wc2vvaj4vzelc0s8ww3kxpgck")
+    "collect_fills"
+    Bucket("liquidity_receipt_bucket")
+;
+CALL_METHOD
+    Address("account_tdx_2_12yqz8dp4gu5wn70k66qqncuhh0hny77tag3ync44w0yrshpxumrj55")
+    "deposit_batch"
+    Expression("ENTIRE_WORKTOP")
+;
+
+Your transaction was submitted! 🎉
+Tx ID
+txid_tdx_2_1l4x90qa2pk0u5t6s904604pattxyx5chmfeas5zcthvnmgxy00xqs9uka7
+
+collect fills from nft 3
+
+CALL_METHOD
+    Address("account_tdx_2_12yqz8dp4gu5wn70k66qqncuhh0hny77tag3ync44w0yrshpxumrj55")
+    "withdraw_non_fungibles"
+    Address("resource_tdx_2_1n2gf2753hzvkkgxmhre63423j593rypaypazxslsswleq5s3jzg8tr")
+    Array<NonFungibleLocalId>(
+        NonFungibleLocalId("#3#")
+    )
+;
+TAKE_ALL_FROM_WORKTOP
+    Address("resource_tdx_2_1n2gf2753hzvkkgxmhre63423j593rypaypazxslsswleq5s3jzg8tr")
+    Bucket("liquidity_receipt_bucket")
+;
+CALL_METHOD
+    Address("component_tdx_2_1cpkayez9079yy3hjlxy2pvlh9dtw2wc2vvaj4vzelc0s8ww3kxpgck")
+    "collect_fills"
+    Bucket("liquidity_receipt_bucket")
+;
+CALL_METHOD
+    Address("account_tdx_2_12yqz8dp4gu5wn70k66qqncuhh0hny77tag3ync44w0yrshpxumrj55")
+    "deposit_batch"
+    Expression("ENTIRE_WORKTOP")
+;
+
+add_liquidity -> 10000 xrd at .7% discount
+
+CALL_METHOD
+    Address("account_tdx_2_12yqz8dp4gu5wn70k66qqncuhh0hny77tag3ync44w0yrshpxumrj55")
+    "withdraw"
+    Address("resource_tdx_2_1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxtfd2jc") 
+    Decimal("10000") 
+;
+TAKE_ALL_FROM_WORKTOP
+    Address("resource_tdx_2_1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxtfd2jc")
+    Bucket("xrd_bucket")
+;
+CALL_METHOD
+    Address("component_tdx_2_1cpkayez9079yy3hjlxy2pvlh9dtw2wc2vvaj4vzelc0s8ww3kxpgck")
+    "add_liquidity"
+    Bucket("xrd_bucket")
+    Decimal("0.007")
+    false
+;
+CALL_METHOD
+    Address("account_tdx_2_12yqz8dp4gu5wn70k66qqncuhh0hny77tag3ync44w0yrshpxumrj55")
+    "deposit_batch"
+    Expression("ENTIRE_WORKTOP")
+;
+
+
+Your transaction was submitted! 🎉
+Tx ID
+txid_tdx_2_1ejprmc27n3qkvh8vp3yndmmryxdfd58qakm6rf3nsptxfx0c4d5s2l9gpc
+
+add_liquidity -> 6000 xrd at 1.5% discount
+
+CALL_METHOD
+    Address("account_tdx_2_12yqz8dp4gu5wn70k66qqncuhh0hny77tag3ync44w0yrshpxumrj55")
+    "withdraw"
+    Address("resource_tdx_2_1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxtfd2jc") 
+    Decimal("6000") 
+;
+TAKE_ALL_FROM_WORKTOP
+    Address("resource_tdx_2_1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxtfd2jc")
+    Bucket("xrd_bucket")
+;
+CALL_METHOD
+    Address("component_tdx_2_1cpkayez9079yy3hjlxy2pvlh9dtw2wc2vvaj4vzelc0s8ww3kxpgck")
+    "add_liquidity"
+    Bucket("xrd_bucket")
+    Decimal("0.015")
+    false
+;
+CALL_METHOD
+    Address("account_tdx_2_12yqz8dp4gu5wn70k66qqncuhh0hny77tag3ync44w0yrshpxumrj55")
+    "deposit_batch"
+    Expression("ENTIRE_WORKTOP")
+;
+
+Your transaction was submitted! 🎉
+Tx ID
+txid_tdx_2_1y5slma9vmjtmte6eghhrsrsy93ukncwtz8aqkw3kuzmke0wvccesfsa6sl
+
+
+add_liquidity -> 8000 xrd at .5% discount
+
+CALL_METHOD
+    Address("account_tdx_2_12yqz8dp4gu5wn70k66qqncuhh0hny77tag3ync44w0yrshpxumrj55")
+    "withdraw"
+    Address("resource_tdx_2_1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxtfd2jc") 
+    Decimal("8000") 
+;
+TAKE_ALL_FROM_WORKTOP
+    Address("resource_tdx_2_1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxtfd2jc")
+    Bucket("xrd_bucket")
+;
+CALL_METHOD
+    Address("component_tdx_2_1cpkayez9079yy3hjlxy2pvlh9dtw2wc2vvaj4vzelc0s8ww3kxpgck")
+    "add_liquidity"
+    Bucket("xrd_bucket")
+    Decimal("0.005")
+    false
+;
+CALL_METHOD
+    Address("account_tdx_2_12yqz8dp4gu5wn70k66qqncuhh0hny77tag3ync44w0yrshpxumrj55")
+    "deposit_batch"
+    Expression("ENTIRE_WORKTOP")
+;
+
+
+Your transaction was submitted! 🎉
+Tx ID
+txid_tdx_2_1y07k3afgs2qnaanjlt58y6c2lc2wp6kq3ldte0c3d04cr3h2xw6smzt834
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// set max orders to iterate through to 26
+
+CALL_METHOD
+    Address("account_tdx_2_12yqz8dp4gu5wn70k66qqncuhh0hny77tag3ync44w0yrshpxumrj55")
+    "create_proof_of_amount"
+    Address("resource_tdx_2_1t4duqau5gax6v8mvfv3kj5asyx09cc60sv0mrdq4xy63hxdf8f7qel")
+    Decimal("1")
+;
+CALL_METHOD
+    Address("component_tdx_2_1cpkayez9079yy3hjlxy2pvlh9dtw2wc2vvaj4vzelc0s8ww3kxpgck")
+    "set_liquidity_receipt_max_iter"
+    25u64
+;
+CALL_METHOD
+    Address("account_tdx_2_12yqz8dp4gu5wn70k66qqncuhh0hny77tag3ync44w0yrshpxumrj55")
+    "deposit_batch"
+    Expression("ENTIRE_WORKTOP")
+;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+################################ FRONT END RTMS ################################
+
+add_liquidity => PUBLIC
+
+CALL_METHOD
+    # Selected account address from dropdown associated with persona
+    Address("account_tdx_2_12yqz8dp4gu5wn70k66qqncuhh0hny77tag3ync44w0yrshpxumrj55")
+    "withdraw"
+    # Static address for XRD
+    Address("resource_tdx_2_1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxtfd2jc") 
+    # Connect this Decimal field to slider
+    Decimal("1000") 
+;
+TAKE_ALL_FROM_WORKTOP
+    # Static XRD Address
+    Address("resource_tdx_2_1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxtfd2jc")
+    Bucket("xrd_bucket")
+;
+CALL_METHOD
+    # Static Liquify component address
+    Address("component_tdx_2_1cpkayez9079yy3hjlxy2pvlh9dtw2wc2vvaj4vzelc0s8ww3kxpgck")
+    "add_liquidity"
+    Bucket("xrd_bucket")
+    # Connect this decimal to discount % slider
+    Decimal("0.01")
+    true
+;
+CALL_METHOD
+    # Selected account address from dropdown associated with persona
+    Address("account_tdx_2_12yqz8dp4gu5wn70k66qqncuhh0hny77tag3ync44w0yrshpxumrj55")
+    "deposit_batch"
+    Expression("ENTIRE_WORKTOP")
+;
+
+remove_liquidity => PUBLIC
+
+CALL_METHOD
+    # Selected account address from dropdown associated with persona
+    Address("account_tdx_2_12yqz8dp4gu5wn70k66qqncuhh0hny77tag3ync44w0yrshpxumrj55")
+    "withdraw_non_fungibles"
+    # Static address for liquidity_receipt NFT
+    Address("resource_tdx_2_1n2gf2753hzvkkgxmhre63423j593rypaypazxslsswleq5s3jzg8tr")
+    # Connect this NFT ID selection a button in the "Your Orders" section
+    Array<NonFungibleLocalId>(
+        NonFungibleLocalId("#1#")
+    )
+;
+TAKE_ALL_FROM_WORKTOP
+    # Static address for liquidity_receipt NFT
+    Address("resource_tdx_2_1n2gf2753hzvkkgxmhre63423j593rypaypazxslsswleq5s3jzg8tr")
+    Bucket("liquidity_receipt_bucket")
+;
+CALL_METHOD
+    # Static Liquify component address
+    Address("component_tdx_2_1cpkayez9079yy3hjlxy2pvlh9dtw2wc2vvaj4vzelc0s8ww3kxpgck")
+    "remove_liquidity"
+    Bucket("liquidity_receipt_bucket")
+;
+CALL_METHOD
+    # Selected account address from dropdown associated with persona
+    Address("account_tdx_2_12yqz8dp4gu5wn70k66qqncuhh0hny77tag3ync44w0yrshpxumrj55")
+    "deposit_batch"
+    Expression("ENTIRE_WORKTOP")
+;
+
+market_sell => PUBLIC
+
+CALL_METHOD
+    # Selected account address from dropdown associated with persona
+    Address("account_tdx_2_12yqz8dp4gu5wn70k66qqncuhh0hny77tag3ync44w0yrshpxumrj55")
+    "withdraw"
+    # Connect this to dropdown selection of LSUs owned by selected account
+    Address("resource_tdx_2_1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxtfd2jc") 
+    # Connect this Decimal field to slider to select amount of LSUs to sell
+    Decimal("100") 
+;
+TAKE_ALL_FROM_WORKTOP
+    # Match the address being withdrawn above
+    Address("resource_tdx_2_1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxtfd2jc")
+    Bucket("lsu_bucket")
+;
+CALL_METHOD
+    # Static Liquify component address
+    Address("component_tdx_2_1cpkayez9079yy3hjlxy2pvlh9dtw2wc2vvaj4vzelc0s8ww3kxpgck")
+    "market_sell"
+    Bucket("lsu_bucket")
+;
+CALL_METHOD
+    # Selected account address from dropdown associated with persona
+    Address("account_tdx_2_12yqz8dp4gu5wn70k66qqncuhh0hny77tag3ync44w0yrshpxumrj55")
+    "deposit_batch"
+    Expression("ENTIRE_WORKTOP")
+;
+
+collect_fills => PUBLIC to be used with "Collect Fills" button in "Your Orders" section
+
+CALL_METHOD
+    # Selected account address from dropdown associated with persona
+    Address("account_tdx_2_12yqz8dp4gu5wn70k66qqncuhh0hny77tag3ync44w0yrshpxumrj55")
+    "withdraw_non_fungibles"
+    # Static address for liquidity_receipt NFT
+    Address("resource_tdx_2_1nf0nlf9upwf7d429u962qa6w9kstx8fa0qyw7j7vmthnvzqpw6kqcw")
+    # Connect this NFT ID selection a button in the "Your Orders" section
+    Array<NonFungibleLocalId>(
+        NonFungibleLocalId("#1#")
+    )
+;
+TAKE_ALL_FROM_WORKTOP
+    # Static address for liquidity_receipt NFT
+    Address("resource_tdx_2_1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxtfd2jc")
+    Bucket("liquidity_receipt_bucket")
+;
+CALL_METHOD
+    # Static Liquify component address
+    Address("component_tdx_2_1cpkayez9079yy3hjlxy2pvlh9dtw2wc2vvaj4vzelc0s8ww3kxpgck")
+    "collect_fills"
+    Bucket("liquidity_receipt_bucket")
+;
+CALL_METHOD
+    # Selected account address from dropdown associated with persona
+    Address("account_tdx_2_12yqz8dp4gu5wn70k66qqncuhh0hny77tag3ync44w0yrshpxumrj55")
+    "deposit_batch"
+    Expression("ENTIRE_WORKTOP")
+;
