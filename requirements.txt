@@ -1,0 +1,2 @@
+radix_engine_toolkit==1.0.12
+Requests==2.32.3
