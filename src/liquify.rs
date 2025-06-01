@@ -520,6 +520,30 @@ pub fn cycle_liquidity(&mut self, receipt_id: NonFungibleLocalId) -> Bucket {
             self.liquidity_data.get(&global_id).unwrap().clone()
         }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         fn calculate_claimable_xrd(&self, receipt_id: &NonFungibleLocalId) -> Decimal {
             let receipt_id_u64 = match receipt_id {
                 NonFungibleLocalId::Integer(i) => i.value(),
@@ -531,36 +555,56 @@ pub fn cycle_liquidity(&mut self, receipt_id: NonFungibleLocalId) -> Bucket {
             
             let mut total_claimable = dec!(0);
             
-            // Use range instead of range_mut since we're not mutating
             for (_, unstake_nft_or_lsu, _) in self.order_fill_tree.range(start_key..=end_key) {
                 match unstake_nft_or_lsu {
                     UnstakeNFTOrLSU::UnstakeNFT(unstake_nft_data) => {
-                        // For unstake NFTs, we need to check if they're claimable
-                        // This is a simplification - in reality you'd check the NFT data
-                        let validator_address = self.get_validator_from_unstake_nft(&unstake_nft_data.resource_address);
+                        let nft_manager = ResourceManager::from(unstake_nft_data.resource_address);
                         
-                        // Get the NFT data to check amount
-                        if let Some(vault) = self.component_vaults.get(&unstake_nft_data.resource_address) {
-                            // For now, assume all unstake NFTs are claimable
-                            // In production, you'd check the claim epoch
-                            let nft_manager = ResourceManager::from(unstake_nft_data.resource_address);
-                            
-                            // This is simplified - you'd need to actually read the NFT data
-                            // to get the exact amount. For now, return a placeholder
-                            total_claimable += dec!(100); // Placeholder amount
+                        // Get claim_amount and claim_epoch from metadata
+                        let claim_amount: Decimal = nft_manager
+                            .get_metadata("claim_amount")
+                            .unwrap()
+                            .unwrap_or_else(|| Runtime::panic(String::from("Invalid stake claim NFT - no claim_amount")));
+                        
+                        let claim_epoch: u64 = nft_manager
+                            .get_metadata("claim_epoch")
+                            .unwrap()
+                            .unwrap_or_else(|| Runtime::panic(String::from("Invalid stake claim NFT - no claim_epoch")));
+                        
+                        // Check if past the unbonding period
+                        let current_epoch = Runtime::current_epoch().number();
+                        if current_epoch >= claim_epoch {
+                            total_claimable += claim_amount;
                         }
                     }
-                    UnstakeNFTOrLSU::LSU(lsu_data) => {
-                        // LSUs can be converted immediately
-                        let validator = self.get_validator_from_lsu(lsu_data.resource_address);
-                        let redemption_value = validator.get_redemption_value(lsu_data.amount);
-                        total_claimable += redemption_value;
+                    UnstakeNFTOrLSU::LSU(_) => {
+                        // LSUs are NOT claimable for XRD - they need to be collected first
+                        // They contribute 0 to claimable XRD
                     }
                 }
             }
             
             total_claimable
         }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
         pub fn remove_liquidity(&mut self, liquidity_receipt_bucket: Bucket) -> (Bucket, Bucket) {
             assert!(liquidity_receipt_bucket.resource_address() == self.liquidity_receipt.address(), "Bucket must contain Liquify liquidity receipt(s)");
