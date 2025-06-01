@@ -173,9 +173,9 @@ mod liquify_module {
                 order_fill_counter: 1,
                 platform_fee: dec!(0.00),
                 fee_vault: Vault::new(XRD),
-                minimum_liquidity: dec!(1000),
+                minimum_liquidity: dec!(10000),
                 receipt_image_url: Url::of("https://bafybeib7cokm27lwwkunaibn7hczijn3ztkypbzttmt7hymaov44s5e5sm.ipfs.w3s.link/liquify2.png"),
-                automation_fee: dec!(4),
+                automation_fee: dec!(5),
             }
             .instantiate()
             .prepare_to_globalize(
@@ -197,14 +197,14 @@ mod liquify_module {
             ))
             .enable_component_royalties(component_royalties! {
                 init {
-                    add_liquidity => Xrd(1.into()), updatable;
-                    increase_liquidity => Xrd(1.into()), updatable;
-                    remove_liquidity => Xrd(1.into()), updatable;
-                    liquify_unstake => Xrd(5.into()), updatable;
-                    liquify_unstake_off_ledger => Xrd(5.into()), updatable;
-                    collect_fills => Xrd(1.into()), updatable;
-                    update_automation => Xrd(1.into()), updatable;
-                    cycle_liquidity => Xrd(1.into()), updatable;
+                    add_liquidity => Free, updatable;
+                    increase_liquidity => Free, updatable;
+                    remove_liquidity => Free, updatable;
+                    liquify_unstake => Free, updatable;
+                    liquify_unstake_off_ledger => Free, updatable;
+                    collect_fills => Free, updatable;
+                    update_automation => Free, updatable;
+                    cycle_liquidity => Free, updatable;
                     get_claimable_xrd => Free, updatable;
                     get_liquidity_data => Free, updatable;
                     set_component_status => Free, updatable;
@@ -679,117 +679,212 @@ pub fn cycle_liquidity(&mut self, receipt_id: NonFungibleLocalId) -> Bucket {
             self.process_unstake(lsu_bucket, order_keys)
         }
 
-        fn process_unstake(&mut self, mut lsu_bucket: FungibleBucket, order_keys: Vec<u128>) -> (Bucket, FungibleBucket) {
-            let mut xrd_bucket: Bucket = Bucket::new(XRD);
-            let mut validator = self.get_validator_from_lsu(lsu_bucket.resource_address());
-            let mut redemption_value = validator.get_redemption_value(lsu_bucket.amount());
 
-            let mut updates = vec![];
-            let mut lsu_sold_total = Decimal::ZERO;
 
-            for key in order_keys {
-                let global_id_option = self.buy_list.get(&key);
-                
-                if global_id_option.is_none() {
-                    continue;
-                }
-                
-                let global_id = global_id_option.unwrap();
-                let local_id = global_id.local_id();
-                let nft_data: LiquidityReceipt = self.liquidity_receipt.get_non_fungible_data(&local_id);
-                let kvs_data = self.liquidity_data.get(&global_id).unwrap();
-                let mut xrd_remaining = kvs_data.xrd_liquidity_available;
 
-                let lsu_amount_to_take;
-                let fill_amount;
 
-                let discount = nft_data.discount;
-                let discounted_xrd_value_of_lsus: Decimal = redemption_value * (1 - discount);
 
-                if discounted_xrd_value_of_lsus <= xrd_remaining {
-                    lsu_amount_to_take = lsu_bucket.amount(); 
-                    fill_amount = discounted_xrd_value_of_lsus; 
 
-                    xrd_remaining -= fill_amount;
-                    redemption_value = Decimal::ZERO;
-                } else {
-                    let max_xrd_for_lsu = redemption_value * (1 - discount);
-                    lsu_amount_to_take = lsu_bucket.amount() * (xrd_remaining / max_xrd_for_lsu);
-                    fill_amount = xrd_remaining;
 
-                    redemption_value = redemption_value * ((lsu_bucket.amount() - lsu_amount_to_take) / lsu_bucket.amount());
-                    xrd_remaining = Decimal::ZERO;
-                }
 
-                let lsu_taken: FungibleBucket = lsu_bucket.take(lsu_amount_to_take);
-                let xrd_funds = self.xrd_liquidity.take(fill_amount);
-                xrd_bucket.put(xrd_funds);
 
-                lsu_sold_total += lsu_amount_to_take;
 
-                updates.push((key, global_id.clone(), nft_data.clone(), lsu_taken, fill_amount, xrd_remaining));
 
-                if redemption_value.is_zero() {
-                    break;
-                }
-            }
 
-            // Apply updates after processing all provided keys
-            for (key, global_id, nft_data, lsu_taken, fill_amount, new_remaining) in updates {
-                let index_usize = (nft_data.discount / dec!(0.00025)).checked_floor().unwrap().to_string().parse::<usize>().unwrap();
-                let currently_liquidity_at_discount = self.liquidity_index[index_usize];
-                self.liquidity_index[index_usize] = currently_liquidity_at_discount - fill_amount.clone();
 
-                if new_remaining == dec!(0) {
-                    self.buy_list.remove(&key);
-                }
 
-                let local_id = global_id.local_id();
-                
-                // Update KVS data in a limited scope to release the borrow
-                {
-                    let mut kvs_data = self.liquidity_data.get_mut(&global_id).unwrap();
-                    kvs_data.xrd_liquidity_filled += fill_amount;
-                    kvs_data.xrd_liquidity_available = new_remaining;
-                    kvs_data.fills_to_collect += 1;
-                } // kvs_data is dropped here, releasing the mutable borrow
 
-                let local_id_u64 = match local_id.clone() {
-                    NonFungibleLocalId::Integer(i) => i.value(),
-                    _ => 0,
-                };
-                
-                let order_fill_key = CombinedKey::new(local_id_u64, self.order_fill_counter as u32, 0).key;
-                self.order_fill_counter += 1;
-                
-                if nft_data.auto_unstake {
-                    let unstake_nft = validator.unstake(lsu_taken);
-                    let unstake_nft_data = UnstakeNFTOrLSU::UnstakeNFT(UnstakeNFTData {
-                        resource_address: unstake_nft.resource_address(),
-                        id: unstake_nft.non_fungible_local_id(),
-                    });
-                    self.order_fill_tree.insert(order_fill_key, unstake_nft_data.clone());
-                    self.ensure_user_vault_exists(unstake_nft.resource_address());
-                    self.component_vaults.get_mut(&unstake_nft.resource_address()).unwrap().as_non_fungible().put(unstake_nft);
-                } else {
-                    let lsu_data = UnstakeNFTOrLSU::LSU(LSUData {
-                        resource_address: lsu_taken.resource_address(),
-                        amount: lsu_taken.amount(),
-                    });
-                    self.order_fill_tree.insert(order_fill_key, lsu_data);
-                    self.ensure_user_vault_exists(lsu_taken.resource_address());
-                    self.component_vaults.get_mut(&lsu_taken.resource_address()).unwrap().as_fungible().put(lsu_taken);
-                }
-            }
 
-            self.total_xrd_volume += xrd_bucket.amount();
-            self.total_xrd_locked -= xrd_bucket.amount();
 
-            let fee_bucket = xrd_bucket.take(xrd_bucket.amount().clone().checked_mul(self.platform_fee).unwrap());
-            self.fee_vault.put(fee_bucket);
-            
-            (xrd_bucket, lsu_bucket)
+
+
+
+
+
+
+
+
+fn process_unstake(&mut self, mut lsu_bucket: FungibleBucket, order_keys: Vec<u128>) -> (Bucket, FungibleBucket) {
+    let mut xrd_bucket: Bucket = Bucket::new(XRD);
+    let mut validator = self.get_validator_from_lsu(lsu_bucket.resource_address());
+    
+    // Pre-calculate redemption rate
+    let redemption_rate = validator.get_redemption_value(dec!(1));
+    let mut remaining_lsus = lsu_bucket.amount();
+    let mut remaining_value = remaining_lsus * redemption_rate;
+
+    // Batch collections
+    let mut avl_removals = Vec::new();
+    let mut kvs_updates: Vec<(NonFungibleGlobalId, Decimal, Decimal, u64)> = Vec::new();
+    let mut index_updates: HashMap<usize, Decimal> = HashMap::new(); // Use HashMap to combine updates
+    
+    // Separate fill operations by type to batch vault operations
+    let mut unstake_operations: Vec<(u128, FungibleBucket)> = Vec::new();
+    let mut lsu_operations: Vec<(u128, ResourceAddress, Decimal)> = Vec::new();
+    let mut vault_resources_needed: HashSet<ResourceAddress> = HashSet::new();
+
+    for key in order_keys {
+        let global_id_option = self.buy_list.get(&key);
+        if global_id_option.is_none() {
+            continue;
         }
+        
+        let global_id = global_id_option.unwrap().clone();
+        let local_id = global_id.local_id();
+        
+        // Read data once
+        let nft_data: LiquidityReceipt = self.liquidity_receipt.get_non_fungible_data(&local_id);
+        let discount = nft_data.discount;
+        let auto_unstake = nft_data.auto_unstake;
+        
+        let kvs_data = self.liquidity_data.get(&global_id).unwrap();
+        let xrd_available = kvs_data.xrd_liquidity_available;
+        let current_fills = kvs_data.fills_to_collect;
+
+        // Calculate fill
+        let discounted_value = remaining_value * (dec!(1) - discount);
+        let (lsu_to_take, fill_amount, new_xrd_available) = if discounted_value <= xrd_available {
+            (remaining_lsus, discounted_value, xrd_available - discounted_value)
+        } else {
+            let lsu_ratio = xrd_available / discounted_value;
+            let lsu_take = remaining_lsus * lsu_ratio;
+            (lsu_take, xrd_available, dec!(0))
+        };
+
+        // Take resources
+        let lsu_taken: FungibleBucket = lsu_bucket.take(lsu_to_take);
+        let xrd_funds = self.xrd_liquidity.take(fill_amount);
+        xrd_bucket.put(xrd_funds);
+
+        // Update tracking
+        remaining_lsus -= lsu_to_take;
+        remaining_value = remaining_lsus * redemption_rate;
+
+        let local_id_u64 = match local_id {
+            NonFungibleLocalId::Integer(i) => i.value(),
+            _ => 0,
+        };
+
+        // Queue updates
+        if new_xrd_available == dec!(0) {
+            avl_removals.push(key);
+        }
+        
+        kvs_updates.push((global_id, new_xrd_available, fill_amount, current_fills + 1));
+        
+        // Aggregate index updates
+        let index = (discount / dec!(0.00025)).checked_floor().unwrap().to_string().parse::<usize>().unwrap();
+        *index_updates.entry(index).or_insert(dec!(0)) += fill_amount;
+
+        // Queue fill operation
+        let order_fill_key = CombinedKey::new(local_id_u64, self.order_fill_counter as u32, 0).key;
+        self.order_fill_counter += 1;
+        
+        if auto_unstake {
+            unstake_operations.push((order_fill_key, lsu_taken));
+            // We'll get the vault resource after unstaking
+        } else {
+            let resource = lsu_taken.resource_address();
+            vault_resources_needed.insert(resource);
+            lsu_operations.push((order_fill_key, resource, lsu_taken.amount()));
+            // Put LSU in temporary storage
+            if !self.component_vaults.get(&resource).is_some() {
+                self.component_vaults.insert(resource, Vault::new(resource));
+            }
+            self.component_vaults.get_mut(&resource).unwrap().as_fungible().put(lsu_taken);
+        }
+
+        if remaining_lsus.is_zero() {
+            break;
+        }
+    }
+
+    // Batch apply all non-vault updates first
+    for key in avl_removals {
+        self.buy_list.remove(&key);
+    }
+
+    for (global_id, new_available, fill_amount, new_fills) in kvs_updates {
+        let mut kvs_data = self.liquidity_data.get_mut(&global_id).unwrap();
+        kvs_data.xrd_liquidity_filled += fill_amount;
+        kvs_data.xrd_liquidity_available = new_available;
+        kvs_data.fills_to_collect = new_fills;
+    }
+
+    for (index, total_fill) in index_updates {
+        self.liquidity_index[index] -= total_fill;
+    }
+
+    // Process LSU fills (already in vaults)
+    for (order_fill_key, resource, amount) in lsu_operations {
+        let lsu_data = UnstakeNFTOrLSU::LSU(LSUData { resource_address: resource, amount });
+        self.order_fill_tree.insert(order_fill_key, lsu_data);
+    }
+
+    // Batch process all unstake operations
+    if !unstake_operations.is_empty() {
+        // Get the first unstake to determine NFT resource
+        let (first_key, first_lsu) = unstake_operations.remove(0);
+        let first_nft = validator.unstake(first_lsu);
+        let nft_resource = first_nft.resource_address();
+        
+        // Ensure vault exists once
+        if !self.component_vaults.get(&nft_resource).is_some() {
+            self.component_vaults.insert(nft_resource, Vault::new(nft_resource));
+        }
+        
+        // Process first NFT
+        let nft_vault = self.component_vaults.get_mut(&nft_resource).unwrap();
+        let first_id = first_nft.non_fungible_local_id();
+        self.order_fill_tree.insert(first_key, UnstakeNFTOrLSU::UnstakeNFT(UnstakeNFTData {
+            resource_address: nft_resource,
+            id: first_id,
+        }));
+        nft_vault.as_non_fungible().put(first_nft);
+        
+        // Process remaining unstakes
+        for (order_fill_key, lsu_bucket) in unstake_operations {
+            let unstake_nft = validator.unstake(lsu_bucket);
+            let nft_id = unstake_nft.non_fungible_local_id();
+            self.order_fill_tree.insert(order_fill_key, UnstakeNFTOrLSU::UnstakeNFT(UnstakeNFTData {
+                resource_address: nft_resource,
+                id: nft_id,
+            }));
+            nft_vault.as_non_fungible().put(unstake_nft);
+        }
+    }
+
+    // Update totals and fees
+    self.total_xrd_volume += xrd_bucket.amount();
+    self.total_xrd_locked -= xrd_bucket.amount();
+
+    let fee_bucket = xrd_bucket.take(xrd_bucket.amount() * self.platform_fee);
+    self.fee_vault.put(fee_bucket);
+    
+    (xrd_bucket, lsu_bucket)
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         
         pub fn collect_fills(&mut self, liquidity_receipt_bucket: Bucket, number_of_fills_to_collect: u64) -> (Vec<Bucket>, Bucket) {
             

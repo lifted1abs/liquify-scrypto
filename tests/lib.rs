@@ -1,4 +1,3 @@
-
 use scrypto_test::prelude::*;
 
 #[derive(Clone)]
@@ -8,26 +7,23 @@ pub struct Account {
 } 
 
 pub struct TestEnvironment {
-
-    ledger: LedgerSimulator<NoExtension, InMemorySubstateDatabase>,
-    admin_account: Account,
-    user_account1: Account,
-    user_account2: Account,
-    user_account3: Account,
-    user_account4: Account,
-    user_account5: Account,
-    user_account6: Account,
-    package_address: PackageAddress,
-    liquify_component: ComponentAddress,
-    owner_badge: ResourceAddress,
-    liquidity_receipt: ResourceAddress,
-
-    lsu_resource_address: ResourceAddress,
+    pub ledger: LedgerSimulator<NoExtension, InMemorySubstateDatabase>,
+    pub admin_account: Account,
+    pub user_account1: Account,
+    pub user_account2: Account,
+    pub user_account3: Account,
+    pub user_account4: Account,
+    pub user_account5: Account,
+    pub user_account6: Account,
+    pub package_address: PackageAddress,
+    pub liquify_component: ComponentAddress,
+    pub owner_badge: ResourceAddress,
+    pub liquidity_receipt: ResourceAddress,
+    pub lsu_resource_address: ResourceAddress,
 }
 
 impl TestEnvironment {
     pub fn instantiate_test() -> Self {
-
         let mut ledger = LedgerSimulatorBuilder::new().without_kernel_trace().build();
 
         let (admin_public_key, _admin_private_key, admin_account_address) = ledger.new_allocated_account();
@@ -52,10 +48,8 @@ impl TestEnvironment {
         let  user_account6 = Account { public_key: user_public_key6, account_address: user_account_address6 };
 
         let package_address = ledger.compile_and_publish(this_package!());
-        
 
         // *********** Instantiate Liquify component ***********
-
         let manifest = ManifestBuilder::new()
             .lock_fee_from_faucet()
             .call_function(
@@ -65,9 +59,9 @@ impl TestEnvironment {
                 manifest_args!(),
             )
             .call_method(
-                DynamicGlobalAddress::Static(GlobalAddress::new_or_panic(admin_account.account_address.into())),
-                "deposit_batch".to_string(),
-                manifest_args!(ManifestExpression::EntireWorktop)
+                admin_account_address,
+                "deposit_batch",
+                manifest_args!(ManifestExpression::EntireWorktop),
             )
             .build();
 
@@ -81,14 +75,7 @@ impl TestEnvironment {
         let owner_badge = receipt.expect_commit(true).new_resource_addresses()[0];
         let liquidity_receipt = receipt.expect_commit(true).new_resource_addresses()[1];
 
-
-
-
-
-
-
-        // *********** User 1 stakes 1000 XRD to validator to receive LSUs ***********
-
+        // *********** User 1 stakes XRD to validator to receive LSUs ***********
         let key = Secp256k1PrivateKey::from_u64(1u64).unwrap().public_key();
         let validator_address = ledger.get_active_validator_with_key(&key);
         let lsu_resource_address = ledger
@@ -103,9 +90,9 @@ impl TestEnvironment {
                 (lookup.bucket("xrd"),)
             })
             .call_method(
-                DynamicGlobalAddress::Static(GlobalAddress::new_or_panic(user_account1.account_address.into())),
-                "deposit_batch".to_string(),
-                manifest_args!(ManifestExpression::EntireWorktop)
+                user_account_address1,
+                "deposit_batch",
+                manifest_args!(ManifestExpression::EntireWorktop),
             )
             .build();
 
@@ -113,19 +100,9 @@ impl TestEnvironment {
             manifest,
             vec![NonFungibleGlobalId::from_public_key(&user_public_key1)],
         );
-        let commit_success = receipt.expect_commit_success();
+        receipt.expect_commit_success();
 
-
-
-
-
-
-        // *********** User 2 stakes 1000 XRD to validator to receive LSUs ***********
-
-        let lsu_resource_address = ledger
-            .get_active_validator_info_by_key(&key)
-            .stake_unit_resource;
-
+        // *********** User 2 stakes XRD to validator to receive LSUs ***********
         let manifest = ManifestBuilder::new()
             .lock_fee_from_faucet() 
             .withdraw_from_account(user_account_address2, XRD, dec!(1000))
@@ -134,9 +111,9 @@ impl TestEnvironment {
                 (lookup.bucket("xrd"),)
             })
             .call_method(
-                DynamicGlobalAddress::Static(GlobalAddress::new_or_panic(user_account2.account_address.into())),
-                "deposit_batch".to_string(),
-                manifest_args!(ManifestExpression::EntireWorktop)
+                user_account_address2,
+                "deposit_batch",
+                manifest_args!(ManifestExpression::EntireWorktop),
             )
             .build();
 
@@ -144,19 +121,9 @@ impl TestEnvironment {
             manifest,
             vec![NonFungibleGlobalId::from_public_key(&user_public_key2)],
         );
-        let commit_success = receipt.expect_commit_success();
+        receipt.expect_commit_success();
 
-
-
-
-
-
-        // *********** User 3 stakes 1000 XRD to validator to receive LSUs ***********
-
-        let lsu_resource_address = ledger
-            .get_active_validator_info_by_key(&key)
-            .stake_unit_resource;
-
+        // *********** User 3 stakes XRD to validator to receive LSUs ***********
         let manifest = ManifestBuilder::new()
             .lock_fee_from_faucet() 
             .withdraw_from_account(user_account_address3, XRD, dec!(1000))
@@ -165,9 +132,9 @@ impl TestEnvironment {
                 (lookup.bucket("xrd"),)
             })
             .call_method(
-                DynamicGlobalAddress::Static(GlobalAddress::new_or_panic(user_account3.account_address.into())),
-                "deposit_batch".to_string(),
-                manifest_args!(ManifestExpression::EntireWorktop)
+                user_account_address3,
+                "deposit_batch",
+                manifest_args!(ManifestExpression::EntireWorktop),
             )
             .build();
 
@@ -175,9 +142,8 @@ impl TestEnvironment {
             manifest,
             vec![NonFungibleGlobalId::from_public_key(&user_public_key3)],
         );
-        let commit_success = receipt.expect_commit_success();
+        receipt.expect_commit_success();
 
-        // let lsu = commit_success.new_resource_addresses()[0];
         let account1_lsu_balance = ledger.get_component_balance(
             user_account_address1, 
             lsu_resource_address
@@ -186,22 +152,43 @@ impl TestEnvironment {
         println!("lsu_address {:?}", lsu_resource_address);
         println!("account1_lsu_ amount {:?}", account1_lsu_balance);
 
+        // *********** Set minimum liquidity to 0 for tests ***********
+        let manifest = ManifestBuilder::new()
+            .lock_fee_from_faucet()
+            .create_proof_from_account_of_amount(
+                admin_account_address, 
+                owner_badge,
+                1,
+            )
+            .call_method(
+                liquify_component, 
+                "set_minimum_liquidity", 
+                manifest_args!(dec!("0")),
+            )
+            .call_method(
+                admin_account_address,
+                "deposit_batch",
+                manifest_args!(ManifestExpression::EntireWorktop),
+            )
+            .build();
+        let receipt = ledger.execute_manifest(
+            manifest,
+            vec![NonFungibleGlobalId::from_public_key(&admin_public_key)],
+        );
+        println!("{:?}\n", receipt);
+        receipt.expect_commit_success();
 
-
-
-
-
-        // *********** User 4 creates a buy order for 1000 XRD at 0.1% discount from face value ***********
-        
+        // *********** User 4 creates liquidity with new parameters ***********
         let manifest = ManifestBuilder::new()
             .lock_fee_from_faucet()
             .withdraw_from_account(user_account_address4, XRD, dec!(1000))
             .take_all_from_worktop(XRD, "xrd")
-            
             .call_method_with_name_lookup(liquify_component, "add_liquidity", |lookup| {(
                 lookup.bucket("xrd"),
-                dec!("0.0010"),
-                false,
+                dec!("0.0010"),  // discount
+                false,           // auto_unstake
+                false,           // auto_refill
+                dec!("0"),       // refill_threshold
             )})
             .call_method(
                 user_account_address4,
@@ -216,22 +203,17 @@ impl TestEnvironment {
         println!("{:?}\n", receipt);
         receipt.expect_commit_success();
 
-
-
-
-
-
-        // *********** User 5 creates a buy order for 1000 XRD at 1% discount from face value ***********
-        
+        // *********** User 5 creates liquidity with auto_unstake enabled ***********
         let manifest = ManifestBuilder::new()
             .lock_fee_from_faucet()
             .withdraw_from_account(user_account_address5, XRD, dec!(1000))
             .take_all_from_worktop(XRD, "xrd")
-            
             .call_method_with_name_lookup(liquify_component, "add_liquidity", |lookup| {(
                 lookup.bucket("xrd"),
-                dec!("0.010"),
-                true,
+                dec!("0.010"),   // discount
+                true,            // auto_unstake
+                false,           // auto_refill
+                dec!("0"),       // refill_threshold
             )})
             .call_method(
                 user_account_address5,
@@ -246,21 +228,17 @@ impl TestEnvironment {
         println!("{:?}\n", receipt);
         receipt.expect_commit_success();
 
-
-
-
-        
-        // *********** User 6 creates a buy order for 1000 XRD at 5% discount from face value ***********
-        
+        // *********** User 6 creates liquidity with automation enabled ***********
         let manifest = ManifestBuilder::new()
             .lock_fee_from_faucet()
             .withdraw_from_account(user_account_address6, XRD, dec!(1000))
             .take_all_from_worktop(XRD, "xrd")
-            
             .call_method_with_name_lookup(liquify_component, "add_liquidity", |lookup| {(
                 lookup.bucket("xrd"),
-                dec!("0.050"),
-                true,
+                dec!("0.050"),    // discount
+                true,             // auto_unstake (required for auto_refill)
+                true,             // auto_refill
+                dec!("10000"),    // refill_threshold
             )})
             .call_method(
                 user_account_address6,
@@ -297,7 +275,6 @@ impl TestEnvironment {
         manifest: TransactionManifestV1, 
         account: Account,
     ) -> TransactionReceipt {
-    
         self.ledger.execute_manifest(
             manifest, 
             vec![NonFungibleGlobalId::from_public_key(&account.public_key)]
@@ -305,34 +282,19 @@ impl TestEnvironment {
     }
 }
 
-
 #[test]
 fn instantiate_test() {
-    // Part 1 Set up test
     TestEnvironment::instantiate_test();
 }
 
-
-
 #[test]
-fn instantiate_test2() {
-    // Part 1 Set up test
+fn test_basic_liquify_flow() {
     let mut ledger = TestEnvironment::instantiate_test();
-    let admin_account = ledger.admin_account.account_address;
     let user_account1 = ledger.user_account1.account_address;
-    let user_account2 = ledger.user_account2.account_address;
-    let user_account3 = ledger.user_account3.account_address;
-    let user_account4 = ledger.user_account4.account_address;
-    let user_account5 = ledger.user_account5.account_address;
-    let user_account6 = ledger.user_account6.account_address;
-    let package_address = ledger.package_address;
     let liquify_component = ledger.liquify_component;
-    let owner_badge = ledger.owner_badge;
-    let liquidity_receipt = ledger.liquidity_receipt;
     let lsu_resource_address = ledger.lsu_resource_address;
 
-    // *********** User 1 sells all LSUs at market rate LSUs ***********
-
+    // User 1 sells LSUs
     let manifest = ManifestBuilder::new()
         .lock_fee(user_account1, 50)
         .withdraw_from_account(
@@ -344,165 +306,19 @@ fn instantiate_test2() {
         .call_method_with_name_lookup(liquify_component, "liquify_unstake", |lookup| {
             (lookup.bucket("lsu"),
                 30u8 // max_iterations
-            
-        )
+            )
         })
         .call_method(
             user_account1,
             "deposit_batch",
             manifest_args!(ManifestExpression::EntireWorktop),
         )
-        .call_method(
-            DynamicGlobalAddress::Static(GlobalAddress::new_or_panic(user_account1.into())),
-            "deposit_batch".to_string(),
-            manifest_args!(ManifestExpression::EntireWorktop)
-        );
+        .build();
         
     let receipt = ledger.execute_manifest(
-        manifest.build(),
+        manifest,
         ledger.user_account1.clone(),
     );
     println!("{:?}\n", receipt);
-    let commit = receipt.expect_commit_success();
-
-    // // ********** User 4 collects unstake nft **********
-   
-    // let manifest = ManifestBuilder::new()
-    //     .lock_fee_from_faucet()
-    //     .withdraw_from_account(
-    //         user_account4, 
-    //         liquidity_receipt, 
-    //         // account1_lsu_balance
-    //         dec!(1)
-    //     )
-    //     .take_all_from_worktop(liquidity_receipt, "liquidity_receipt_bucket")
-        
-    //     .call_method_with_name_lookup(liquify_component, "collect_fills", |lookup| {
-    //         (lookup.bucket("liquidity_receipt_bucket"),)
-    //     })
-    //     .call_method(
-    //         user_account4,
-    //         "deposit_batch",
-    //         manifest_args!(ManifestExpression::EntireWorktop),
-    //     )
-    //     .build();
-    // let receipt = ledger.execute_manifest(
-    //     manifest,
-    //     ledger.user_account4.clone(),
-    // );
-    // println!("{:?}\n", receipt);
-    // receipt.expect_commit_success();
-
-    // // *********** User 2 sells all LSUs at market rate LSUs ***********
-
-    // let manifest = ManifestBuilder::new()
-    //     .lock_fee(user_account2, 50)
-    //     .withdraw_from_account(
-    //         user_account2, 
-    //         lsu_resource_address, 
-    //         dec!(1000)
-    //     )
-    //     .take_all_from_worktop(lsu_resource_address, "lsu")
-    //     .call_method_with_name_lookup(liquify_component, "market_sell", |lookup| {
-    //         (lookup.bucket("lsu"),)
-    //     })
-    //     .call_method(
-    //         user_account2,
-    //         "deposit_batch",
-    //         manifest_args!(ManifestExpression::EntireWorktop),
-    //     )
-    //     .deposit_batch(user_account2);
-        
-    // let receipt = ledger.execute_manifest(
-    //     manifest.build(),
-    //     ledger.user_account2.clone(),
-    // );
-    // println!("{:?}\n", receipt);
-    // let commit = receipt.expect_commit_success();
-
-    //     // *********** User 3 sells all LSUs at market rate LSUs ***********
-
-    //     let manifest = ManifestBuilder::new()
-    //     .lock_fee(user_account3, 50)
-    //     .withdraw_from_account(
-    //         user_account3, 
-    //         lsu_resource_address, 
-    //         dec!(1000)
-    //     )
-    //     .take_all_from_worktop(lsu_resource_address, "lsu")
-    //     .call_method_with_name_lookup(liquify_component, "market_sell", |lookup| {
-    //         (lookup.bucket("lsu"),)
-    //     })
-    //     .call_method(
-    //         user_account3,
-    //         "deposit_batch",
-    //         manifest_args!(ManifestExpression::EntireWorktop),
-    //     )
-    //     .deposit_batch(user_account3);
-        
-    // let receipt = ledger.execute_manifest(
-    //     manifest.build(),
-    //     ledger.user_account3.clone(),
-    // );
-    // println!("{:?}\n", receipt);
-    // let commit = receipt.expect_commit_success();
-
-    // // ********** User 5 collects unstake nft **********
-   
-    // let manifest = ManifestBuilder::new()
-    //     .lock_fee_from_faucet()
-    //     .withdraw_from_account(
-    //         user_account5, 
-    //         liquidity_receipt, 
-    //         // account1_lsu_balance
-    //         dec!(1)
-    //     )
-    //     .take_all_from_worktop(liquidity_receipt, "liquidity_receipt_bucket")
-        
-    //     .call_method_with_name_lookup(liquify_component, "collect_fills", |lookup| {
-    //         (lookup.bucket("liquidity_receipt_bucket"),)
-    //     })
-    //     .call_method(
-    //         user_account5,
-    //         "deposit_batch",
-    //         manifest_args!(ManifestExpression::EntireWorktop),
-    //     )
-    //     .build();
-    // let receipt = ledger.execute_manifest(
-    //     manifest,
-    //     ledger.user_account5.clone(),
-    // );
-    // println!("{:?}\n", receipt);
-    // receipt.expect_commit_success();
-
-    // // ********** User 6 collects unstake nft **********
-   
-    // let manifest = ManifestBuilder::new()
-    //     .lock_fee_from_faucet()
-    //     .withdraw_from_account(
-    //         user_account6, 
-    //         liquidity_receipt, 
-    //         // account1_lsu_balance
-    //         dec!(1)
-    //     )
-    //     .take_all_from_worktop(liquidity_receipt, "liquidity_receipt_bucket")
-        
-    //     .call_method_with_name_lookup(liquify_component, "collect_fills", |lookup| {
-    //         (lookup.bucket("liquidity_receipt_bucket"),)
-    //     })
-    //     .call_method(
-    //         user_account6,
-    //         "deposit_batch",
-    //         manifest_args!(ManifestExpression::EntireWorktop),
-    //     )
-    //     .build();
-    // let receipt = ledger.execute_manifest(
-    //     manifest,
-    //     ledger.user_account6.clone(),
-    // );
-    // println!("{:?}\n", receipt);
-    // receipt.expect_commit_success();
-
-
-
+    receipt.expect_commit_success();
 }
