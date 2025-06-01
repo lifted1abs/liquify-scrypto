@@ -1,5 +1,5 @@
 use scrypto::prelude::*;
-use crate::liquify::liquify_module::Liquify;
+use crate::liquify_old::liquify_module::Liquify;
 
 #[blueprint]
 #[types(ComponentAddress, ResourceAddress, u32)]
