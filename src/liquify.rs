@@ -84,6 +84,7 @@ mod liquify_module {
     }
 
     struct Liquify {
+        
 
         liquify_owner_badge: ResourceAddress,
         xrd_liquidity: Vault, // holds all XRD liquidity
