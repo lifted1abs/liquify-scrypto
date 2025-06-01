@@ -363,14 +363,19 @@ mod liquify_module {
         pub fn cycle_liquidity(&mut self, receipt_id: NonFungibleLocalId) -> Bucket {
             let nft_data: LiquidityReceipt = self.liquidity_receipt.get_non_fungible_data(&receipt_id);
             let global_id = NonFungibleGlobalId::new(self.liquidity_receipt.address(), receipt_id.clone());
-            let kvs_data = self.liquidity_data.get(&global_id).unwrap();
             
-            assert!(nft_data.auto_refill, "Automation not enabled for this receipt");
-            assert!(nft_data.auto_unstake, "Can only cycle receipts with auto_unstake enabled");
+            // Get data, check conditions, then drop the borrow
+            let (auto_refill, auto_unstake, refill_threshold, discount) = {
+                let kvs_data = self.liquidity_data.get(&global_id).unwrap();
+                (nft_data.auto_refill, nft_data.auto_unstake, nft_data.refill_threshold, nft_data.discount)
+            };
+            
+            assert!(auto_refill, "Automation not enabled for this receipt");
+            assert!(auto_unstake, "Can only cycle receipts with auto_unstake enabled");
             
             // Calculate claimable XRD from fills
             let claimable_xrd = self.calculate_claimable_xrd(&receipt_id);
-            assert!(claimable_xrd >= nft_data.refill_threshold, "Not enough claimable XRD to meet threshold");
+            assert!(claimable_xrd >= refill_threshold, "Not enough claimable XRD to meet threshold");
             
             // Collect all fills for this receipt
             let mut total_xrd = Bucket::new(XRD);
@@ -383,35 +388,33 @@ mod liquify_module {
             let start_key = CombinedKey::new(receipt_id_u64, 1, 0).key;
             let end_key = CombinedKey::new(receipt_id_u64, u32::MAX, 0).key;
             
-            let mut keys_to_remove = Vec::new();
+            // Collect keys and data first, then process
+            let mut fills_to_process = Vec::new();
+            for (key, value) in self.order_fill_tree.range(start_key..=end_key) {
+                fills_to_process.push((*key, value.clone()));
+            }
             
-            self.order_fill_tree.range_mut(start_key..=end_key).for_each(
-                |(avl_key, unstake_nft_or_lsu, _)| {
-                    match unstake_nft_or_lsu {
-                        UnstakeNFTOrLSU::UnstakeNFT(unstake_nft_data) => {
-                            // Process unstake NFT - claim the XRD
-                            let unstake_nft_vault = self.component_vaults.get_mut(&unstake_nft_data.resource_address).unwrap();
-                            let unstake_nft = unstake_nft_vault.as_non_fungible().take_non_fungible(&unstake_nft_data.id);
-                            
-                            // Get validator and claim
-                            let validator_address = self.get_validator_from_unstake_nft(&unstake_nft_data.resource_address);
-                            let validator: Global<Validator> = Global::from(validator_address);
-                            let claimed_xrd = validator.claim_xrd(unstake_nft.into());
-                            total_xrd.put((claimed_xrd).into());
-                        }
-                        UnstakeNFTOrLSU::LSU(_) => {
-                            panic!("Cannot cycle LSU fills - receipt must have auto_unstake enabled");
-                        }
+            // Now process the fills
+            for (avl_key, unstake_nft_or_lsu) in fills_to_process {
+                match unstake_nft_or_lsu {
+                    UnstakeNFTOrLSU::UnstakeNFT(unstake_nft_data) => {
+                        // Process unstake NFT - claim the XRD
+                        let unstake_nft_vault = self.component_vaults.get_mut(&unstake_nft_data.resource_address).unwrap();
+                        let unstake_nft = unstake_nft_vault.as_non_fungible().take_non_fungible(&unstake_nft_data.id);
+                        
+                        // Get validator and claim
+                        let validator_address = self.get_validator_from_unstake_nft(&unstake_nft_data.resource_address);
+                        let validator: Global<Validator> = Global::from(validator_address);
+                        let claimed_xrd = validator.claim_xrd(unstake_nft.into());
+                        total_xrd.put(claimed_xrd);
                     }
-                    
-                    keys_to_remove.push(*avl_key);
-                    scrypto_avltree::IterMutControl::Continue
+                    UnstakeNFTOrLSU::LSU(_) => {
+                        panic!("Cannot cycle LSU fills - receipt must have auto_unstake enabled");
+                    }
                 }
-            );
-            
-            // Remove processed fills
-            for key in keys_to_remove {
-                self.order_fill_tree.remove(&key);
+                
+                // Remove the processed fill
+                self.order_fill_tree.remove(&avl_key);
             }
             
             // Update KVS data
@@ -425,13 +428,12 @@ mod liquify_module {
             
             // Find and remove from current position in AVL tree
             let mut key_to_remove = None;
-            self.buy_list.range_mut(0..u128::MAX).for_each(|(key, tree_global_id, _)| {
+            for (key, tree_global_id) in self.buy_list.range(0..u128::MAX) {
                 if tree_global_id == &global_id {
                     key_to_remove = Some(*key);
-                    return scrypto_avltree::IterMutControl::Break;
+                    break;
                 }
-                scrypto_avltree::IterMutControl::Continue
-            });
+            }
             
             if let Some(key) = key_to_remove {
                 self.buy_list.remove(&key);
@@ -446,7 +448,7 @@ mod liquify_module {
             kvs_data.last_added_epoch = current_epoch;
             
             // Create new key with current epoch
-            let discount_u64 = (nft_data.discount * dec!(10000)).checked_floor().unwrap().to_string().parse::<u64>().unwrap();
+            let discount_u64 = (discount * dec!(10000)).checked_floor().unwrap().to_string().parse::<u64>().unwrap();
             let new_combined_key = CombinedKey::new(discount_u64, current_epoch, self.liquidity_receipt_counter);
             self.liquidity_receipt_counter += 1;
             
@@ -454,7 +456,7 @@ mod liquify_module {
             self.buy_list.insert(new_combined_key.key, global_id);
             
             // Update liquidity index
-            let index_usize = (nft_data.discount / dec!(0.00025)).checked_floor().unwrap().to_string().parse::<usize>().unwrap();
+            let index_usize = (discount / dec!(0.00025)).checked_floor().unwrap().to_string().parse::<usize>().unwrap();
             self.liquidity_index[index_usize] += xrd_to_add;
             
             // Put XRD in vault
@@ -485,35 +487,33 @@ mod liquify_module {
             
             let mut total_claimable = dec!(0);
             
-            self.order_fill_tree.range_mut(start_key..=end_key).for_each(
-                |(_, unstake_nft_or_lsu, _)| {
-                    match unstake_nft_or_lsu {
-                        UnstakeNFTOrLSU::UnstakeNFT(unstake_nft_data) => {
-                            // For unstake NFTs, we need to check if they're claimable
-                            // This is a simplification - in reality you'd check the NFT data
-                            let validator_address = self.get_validator_from_unstake_nft(&unstake_nft_data.resource_address);
+            // Use range instead of range_mut since we're not mutating
+            for (_, unstake_nft_or_lsu) in self.order_fill_tree.range(start_key..=end_key) {
+                match unstake_nft_or_lsu {
+                    UnstakeNFTOrLSU::UnstakeNFT(unstake_nft_data) => {
+                        // For unstake NFTs, we need to check if they're claimable
+                        // This is a simplification - in reality you'd check the NFT data
+                        let validator_address = self.get_validator_from_unstake_nft(&unstake_nft_data.resource_address);
+                        
+                        // Get the NFT data to check amount
+                        if let Some(vault) = self.component_vaults.get(&unstake_nft_data.resource_address) {
+                            // For now, assume all unstake NFTs are claimable
+                            // In production, you'd check the claim epoch
+                            let nft_manager = ResourceManager::from(unstake_nft_data.resource_address);
                             
-                            // Get the NFT data to check amount
-                            if let Some(vault) = self.component_vaults.get(&unstake_nft_data.resource_address) {
-                                // For now, assume all unstake NFTs are claimable
-                                // In production, you'd check the claim epoch
-                                let nft_manager = ResourceManager::from(unstake_nft_data.resource_address);
-                                
-                                // This is simplified - you'd need to actually read the NFT data
-                                // to get the exact amount. For now, return a placeholder
-                                total_claimable += dec!(100); // Placeholder amount
-                            }
-                        }
-                        UnstakeNFTOrLSU::LSU(lsu_data) => {
-                            // LSUs can be converted immediately
-                            let validator = self.get_validator_from_lsu(lsu_data.resource_address);
-                            let redemption_value = validator.get_redemption_value(lsu_data.amount);
-                            total_claimable += redemption_value;
+                            // This is simplified - you'd need to actually read the NFT data
+                            // to get the exact amount. For now, return a placeholder
+                            total_claimable += dec!(100); // Placeholder amount
                         }
                     }
-                    scrypto_avltree::IterMutControl::Continue
+                    UnstakeNFTOrLSU::LSU(lsu_data) => {
+                        // LSUs can be converted immediately
+                        let validator = self.get_validator_from_lsu(lsu_data.resource_address);
+                        let redemption_value = validator.get_redemption_value(lsu_data.amount);
+                        total_claimable += redemption_value;
+                    }
                 }
-            );
+            }
             
             total_claimable
         }
@@ -706,15 +706,18 @@ mod liquify_module {
                 "Bucket must contain Liquify liquidity receipts NFT(s)"
             );
 
-            let mut updates = vec![];
             let mut bucket_vec: Vec<Bucket> = Vec::new();
             let mut collect_counter: u64 = 0;
+            let mut all_updates = vec![];
 
             for order_id in liquidity_receipt_bucket.as_non_fungible().non_fungible_local_ids() {
                 let global_id = NonFungibleGlobalId::new(self.liquidity_receipt.address(), order_id.clone());
-                let kvs_data = self.liquidity_data.get(&global_id).unwrap();
+                let fills_to_collect = {
+                    let kvs_data = self.liquidity_data.get(&global_id).unwrap();
+                    kvs_data.fills_to_collect
+                };
 
-                if kvs_data.fills_to_collect == 0 {
+                if fills_to_collect == 0 {
                     continue;
                 }
 
@@ -731,50 +734,49 @@ mod liquify_module {
                 let end_key = CombinedKey::new(order_id_u64, u32::MAX, 0).key;
 
                 let mut fills_collected_for_this_order: u64 = 0;
+                let mut fills_to_remove = Vec::new();
 
-                self.order_fill_tree.range_mut(start_key..=end_key).for_each(
-                    |(avl_key, unstake_nft_or_lsu, _next_key): (&u128, &mut UnstakeNFTOrLSU, Option<u128>)| {
-                        if collect_counter >= number_of_fills_to_collect {
-                            return scrypto_avltree::IterMutControl::Break;
-                        }
+                // First, collect the fills we need to process
+                for (key, value) in self.order_fill_tree.range(start_key..=end_key) {
+                    if collect_counter >= number_of_fills_to_collect {
+                        break;
+                    }
 
-                        match unstake_nft_or_lsu {
-                            UnstakeNFTOrLSU::LSU(lsu_data) => {
-                                let mut lsu_bucket = Bucket::new(lsu_data.resource_address);
-                                let lsu_resource = lsu_data.resource_address;
-                                let lsu_amount = lsu_data.amount;
-                                let mut lsu_vault = self.component_vaults.get_mut(&lsu_resource).unwrap();
-                                lsu_bucket.put(lsu_vault.take(lsu_amount));
-                                bucket_vec.push(lsu_bucket);
-                            }
-
-                            UnstakeNFTOrLSU::UnstakeNFT(unstake_nft_data) => {
-                                let mut unstake_nft_bucket = Bucket::new(unstake_nft_data.resource_address);
-                                let unstake_nft_id = &unstake_nft_data.id;
-                                let unstake_nft_vault = self.component_vaults.get_mut(&unstake_nft_data.resource_address).unwrap();
-                                unstake_nft_bucket.put(unstake_nft_vault.as_non_fungible().take_non_fungible(&unstake_nft_id).into());
-                                bucket_vec.push(unstake_nft_bucket);
-                            }
-                        }
-
-                        updates.push((*avl_key, global_id.clone(), kvs_data.fills_to_collect - 1));
-                        fills_collected_for_this_order += 1;
-                        collect_counter += 1;
-
-                        scrypto_avltree::IterMutControl::Continue
-                    },
-                );
-
-                let new_fills_to_collect = kvs_data.fills_to_collect - fills_collected_for_this_order;
-                
-                if fills_collected_for_this_order > 0 {
-                    updates.push((start_key, global_id.clone(), new_fills_to_collect));
+                    fills_to_remove.push((*key, value.clone()));
+                    fills_collected_for_this_order += 1;
+                    collect_counter += 1;
                 }
+
+                // Process the collected fills
+                for (avl_key, unstake_nft_or_lsu) in fills_to_remove {
+                    match unstake_nft_or_lsu {
+                        UnstakeNFTOrLSU::LSU(lsu_data) => {
+                            let mut lsu_bucket = Bucket::new(lsu_data.resource_address);
+                            let lsu_resource = lsu_data.resource_address;
+                            let lsu_amount = lsu_data.amount;
+                            let mut lsu_vault = self.component_vaults.get_mut(&lsu_resource).unwrap();
+                            lsu_bucket.put(lsu_vault.take(lsu_amount));
+                            bucket_vec.push(lsu_bucket);
+                        }
+
+                        UnstakeNFTOrLSU::UnstakeNFT(unstake_nft_data) => {
+                            let mut unstake_nft_bucket = Bucket::new(unstake_nft_data.resource_address);
+                            let unstake_nft_id = &unstake_nft_data.id;
+                            let unstake_nft_vault = self.component_vaults.get_mut(&unstake_nft_data.resource_address).unwrap();
+                            unstake_nft_bucket.put(unstake_nft_vault.as_non_fungible().take_non_fungible(&unstake_nft_id).into());
+                            bucket_vec.push(unstake_nft_bucket);
+                        }
+                    }
+
+                    self.order_fill_tree.remove(&avl_key);
+                }
+
+                let new_fills_to_collect = fills_to_collect - fills_collected_for_this_order;
+                all_updates.push((global_id, new_fills_to_collect));
             }
 
-            for (avl_key_to_remove, global_id, new_fills_to_collect) in updates {
-                self.order_fill_tree.remove(&avl_key_to_remove);
-                
+            // Apply all KVS updates
+            for (global_id, new_fills_to_collect) in all_updates {
                 let mut kvs_data = self.liquidity_data.get_mut(&global_id).unwrap();
                 kvs_data.fills_to_collect = new_fills_to_collect;
             }
