@@ -243,10 +243,37 @@ impl TestEnvironment {
     }
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 #[test]
 fn instantiate_test() {
     TestEnvironment::instantiate_test();
 }
+
+
+
+
+
+
+
+
+
+
+
 
 #[test]
 fn test_interface_iterations() {
@@ -266,7 +293,7 @@ fn test_interface_iterations() {
         .take_all_from_worktop(lsu_resource_address, "lsu")
         .call_method_with_name_lookup(liquify_interface_component, "liquify_unstake", |lookup| {
             (lookup.bucket("lsu"),
-            26u8  // max_iterations for interface
+            31u8  // max_iterations for interface
         )
         })
         .call_method(
@@ -283,6 +310,18 @@ fn test_interface_iterations() {
     println!("{:?}\n", receipt);
     receipt.expect_commit_success();
 }
+
+
+
+
+
+
+
+
+
+
+
+
 
 #[test]
 fn test_interface_automation() {
@@ -346,6 +385,20 @@ fn test_interface_automation() {
     println!("{:?}\n", receipt);
     receipt.expect_commit_success();
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 #[test]
 fn test_interface_increase_liquidity() {
