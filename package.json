@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "@calamari-radix/sbor-ez-mode": "^1.2.1"
+  }
+}
