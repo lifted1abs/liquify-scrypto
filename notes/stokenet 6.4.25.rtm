@@ -4,12 +4,12 @@ Transaction ID: txid_tdx_2_104fqrrnjp4kvet6d60e7udawcpvrm47mtskpn7ktyw3n66davgas
 Resource address: resource_tdx_2_1t44x9flkp8np5epw0x6jw9y29pesrpjzwenjsh59trrj6zn6k62tcz
 
 Your package was submitted! 🎉
-Transaction ID: txid_tdx_2_1vmhspe74ymfmhngm8x2d9mm8swstxuy65dah44u7wtxhkq6s0vpszgq8j6
-Package address: package_tdx_2_1p4d2qqnk8yvctk6smwuadp6hawzyd4l0rssz8q4nt9ddlpjx2z68fk
+Transaction ID: txid_tdx_2_1kvw04j8e7glnq58xmrxtwx5rd3q5zenle9a7qcq9xdghxr0faj9sd9dp3y
+Package address: package_tdx_2_1ph53cka02eqfpgx355tj6jan7rh33mmp6rp2pdpxd602pf7ttnw0zg
 
 
 CALL_FUNCTION
-    Address("package_tdx_2_1p4d2qqnk8yvctk6smwuadp6hawzyd4l0rssz8q4nt9ddlpjx2z68fk")
+    Address("package_tdx_2_1ph53cka02eqfpgx355tj6jan7rh33mmp6rp2pdpxd602pf7ttnw0zg")
     "Liquify"
     "instantiate_liquify"
 ;
@@ -21,14 +21,14 @@ CALL_METHOD
 
 Your transaction was submitted! 🎉
 Tx ID
-txid_tdx_2_1yxa85uxffngdg92eudxy0tg65uzgukuzvg59nrf0g243yynp9s7s72qwny
+txid_tdx_2_1rhdg4j072ehf6vlz6ppt2jgzvlw9dczpc3kfvr5fleyudle4zktsrm996e
 
 // liquify component address
-component_tdx_2_1cpkayez9079yy3hjlxy2pvlh9dtw2wc2vvaj4vzelc0s8ww3kxpgck
+component_tdx_2_1cpllsc0gh29nd47z7kel96cwjq9ad29f4jpjdclwkth9mrcj3v35v2
 // liquify owner badge address
-resource_tdx_2_1t4duqau5gax6v8mvfv3kj5asyx09cc60sv0mrdq4xy63hxdf8f7qel
+resource_tdx_2_1thqy3wpsa4a2v7ym3hhccqresljxc9xyvd0t0mu5xuj7v33hu4xjtg
 // liquidity receipt address
-resource_tdx_2_1n2gf2753hzvkkgxmhre63423j593rypaypazxslsswleq5s3jzg8tr
+resource_tdx_2_1n2eq0ud09mujkm56ggnmm37l7xlz239zeyrdsqj2mnqk3hkyqyakj5
 
 
 
@@ -82,7 +82,7 @@ TAKE_ALL_FROM_WORKTOP
     Bucket("xrd_bucket1")
 ;
 CALL_METHOD
-    Address("component_tdx_2_1cpkayez9079yy3hjlxy2pvlh9dtw2wc2vvaj4vzelc0s8ww3kxpgck")
+    Address("component_tdx_2_1cpllsc0gh29nd47z7kel96cwjq9ad29f4jpjdclwkth9mrcj3v35v2")
     "add_liquidity"
     Bucket("xrd_bucket1")
     Decimal("0.0025")
@@ -99,7 +99,7 @@ TAKE_ALL_FROM_WORKTOP
     Bucket("xrd_bucket2")
 ;
 CALL_METHOD
-    Address("component_tdx_2_1cpkayez9079yy3hjlxy2pvlh9dtw2wc2vvaj4vzelc0s8ww3kxpgck")
+    Address("component_tdx_2_1cpllsc0gh29nd47z7kel96cwjq9ad29f4jpjdclwkth9mrcj3v35v2")
     "add_liquidity"
     Bucket("xrd_bucket2")
     Decimal("0.005")
@@ -116,7 +116,7 @@ TAKE_ALL_FROM_WORKTOP
     Bucket("xrd_bucket3")
 ;
 CALL_METHOD
-    Address("component_tdx_2_1cpkayez9079yy3hjlxy2pvlh9dtw2wc2vvaj4vzelc0s8ww3kxpgck")
+    Address("component_tdx_2_1cpllsc0gh29nd47z7kel96cwjq9ad29f4jpjdclwkth9mrcj3v35v2")
     "add_liquidity"
     Bucket("xrd_bucket3")
     Decimal("0.0075")
@@ -133,7 +133,7 @@ TAKE_ALL_FROM_WORKTOP
     Bucket("xrd_bucket4")
 ;
 CALL_METHOD
-    Address("component_tdx_2_1cpkayez9079yy3hjlxy2pvlh9dtw2wc2vvaj4vzelc0s8ww3kxpgck")
+    Address("component_tdx_2_1cpllsc0gh29nd47z7kel96cwjq9ad29f4jpjdclwkth9mrcj3v35v2")
     "add_liquidity"
     Bucket("xrd_bucket4")
     Decimal("0.01")
@@ -151,7 +151,7 @@ TAKE_ALL_FROM_WORKTOP
     Bucket("xrd_bucket5")
 ;
 CALL_METHOD
-    Address("component_tdx_2_1cpkayez9079yy3hjlxy2pvlh9dtw2wc2vvaj4vzelc0s8ww3kxpgck")
+    Address("component_tdx_2_1cpllsc0gh29nd47z7kel96cwjq9ad29f4jpjdclwkth9mrcj3v35v2")
     "add_liquidity"
     Bucket("xrd_bucket5")
     Decimal("0.0125")
@@ -168,7 +168,7 @@ TAKE_ALL_FROM_WORKTOP
     Bucket("xrd_bucket6")
 ;
 CALL_METHOD
-    Address("component_tdx_2_1cpkayez9079yy3hjlxy2pvlh9dtw2wc2vvaj4vzelc0s8ww3kxpgck")
+    Address("component_tdx_2_1cpllsc0gh29nd47z7kel96cwjq9ad29f4jpjdclwkth9mrcj3v35v2")
     "add_liquidity"
     Bucket("xrd_bucket6")
     Decimal("0.015")
@@ -186,7 +186,7 @@ TAKE_ALL_FROM_WORKTOP
     Bucket("xrd_bucket7")
 ;
 CALL_METHOD
-    Address("component_tdx_2_1cpkayez9079yy3hjlxy2pvlh9dtw2wc2vvaj4vzelc0s8ww3kxpgck")
+    Address("component_tdx_2_1cpllsc0gh29nd47z7kel96cwjq9ad29f4jpjdclwkth9mrcj3v35v2")
     "add_liquidity"
     Bucket("xrd_bucket7")
     Decimal("0.0175")
@@ -204,7 +204,7 @@ TAKE_ALL_FROM_WORKTOP
     Bucket("xrd_bucket8")
 ;
 CALL_METHOD
-    Address("component_tdx_2_1cpkayez9079yy3hjlxy2pvlh9dtw2wc2vvaj4vzelc0s8ww3kxpgck")
+    Address("component_tdx_2_1cpllsc0gh29nd47z7kel96cwjq9ad29f4jpjdclwkth9mrcj3v35v2")
     "add_liquidity"
     Bucket("xrd_bucket8")
     Decimal("0.02")
@@ -222,7 +222,7 @@ TAKE_ALL_FROM_WORKTOP
     Bucket("xrd_bucket9")
 ;
 CALL_METHOD
-    Address("component_tdx_2_1cpkayez9079yy3hjlxy2pvlh9dtw2wc2vvaj4vzelc0s8ww3kxpgck")
+    Address("component_tdx_2_1cpllsc0gh29nd47z7kel96cwjq9ad29f4jpjdclwkth9mrcj3v35v2")
     "add_liquidity"
     Bucket("xrd_bucket9")
     Decimal("0.0225")
@@ -240,7 +240,7 @@ TAKE_ALL_FROM_WORKTOP
     Bucket("xrd_bucket10")
 ;
 CALL_METHOD
-    Address("component_tdx_2_1cpkayez9079yy3hjlxy2pvlh9dtw2wc2vvaj4vzelc0s8ww3kxpgck")
+    Address("component_tdx_2_1cpllsc0gh29nd47z7kel96cwjq9ad29f4jpjdclwkth9mrcj3v35v2")
     "add_liquidity"
     Bucket("xrd_bucket10")
     Decimal("0.025")
@@ -292,7 +292,7 @@ TAKE_ALL_FROM_WORKTOP
     Bucket("xrd_bucket")
 ;
 CALL_METHOD
-    Address("component_tdx_2_1cpkayez9079yy3hjlxy2pvlh9dtw2wc2vvaj4vzelc0s8ww3kxpgck")
+    Address("component_tdx_2_1cpllsc0gh29nd47z7kel96cwjq9ad29f4jpjdclwkth9mrcj3v35v2")
     "add_liquidity"
     Bucket("xrd_bucket")
     Decimal("0.01")
@@ -322,7 +322,7 @@ TAKE_ALL_FROM_WORKTOP
     Bucket("lsu_bucket")
 ;
 CALL_METHOD
-    Address("component_tdx_2_1cpkayez9079yy3hjlxy2pvlh9dtw2wc2vvaj4vzelc0s8ww3kxpgck")
+    Address("component_tdx_2_1cpllsc0gh29nd47z7kel96cwjq9ad29f4jpjdclwkth9mrcj3v35v2")
     "market_sell"
     Bucket("lsu_bucket")
     Decimal("0.0")
@@ -343,17 +343,17 @@ collect fills from nft 1
 CALL_METHOD
     Address("account_tdx_2_12yqz8dp4gu5wn70k66qqncuhh0hny77tag3ync44w0yrshpxumrj55")
     "withdraw_non_fungibles"
-    Address("resource_tdx_2_1n2gf2753hzvkkgxmhre63423j593rypaypazxslsswleq5s3jzg8tr")
+    Address("resource_tdx_2_1n2eq0ud09mujkm56ggnmm37l7xlz239zeyrdsqj2mnqk3hkyqyakj5")
     Array<NonFungibleLocalId>(
         NonFungibleLocalId("#1#")
     )
 ;
 TAKE_ALL_FROM_WORKTOP
-    Address("resource_tdx_2_1n2gf2753hzvkkgxmhre63423j593rypaypazxslsswleq5s3jzg8tr")
+    Address("resource_tdx_2_1n2eq0ud09mujkm56ggnmm37l7xlz239zeyrdsqj2mnqk3hkyqyakj5")
     Bucket("liquidity_receipt_bucket")
 ;
 CALL_METHOD
-    Address("component_tdx_2_1cpkayez9079yy3hjlxy2pvlh9dtw2wc2vvaj4vzelc0s8ww3kxpgck")
+    Address("component_tdx_2_1cpllsc0gh29nd47z7kel96cwjq9ad29f4jpjdclwkth9mrcj3v35v2")
     "collect_fills"
     Bucket("liquidity_receipt_bucket")
 ;
@@ -374,17 +374,17 @@ remove_liquidity => PUBLIC
 CALL_METHOD
     Address("account_tdx_2_12yqz8dp4gu5wn70k66qqncuhh0hny77tag3ync44w0yrshpxumrj55")
     "withdraw_non_fungibles"
-    Address("resource_tdx_2_1n2gf2753hzvkkgxmhre63423j593rypaypazxslsswleq5s3jzg8tr")
+    Address("resource_tdx_2_1n2eq0ud09mujkm56ggnmm37l7xlz239zeyrdsqj2mnqk3hkyqyakj5")
     Array<NonFungibleLocalId>(
         NonFungibleLocalId("#1#")
     )
 ;
 TAKE_ALL_FROM_WORKTOP
-    Address("resource_tdx_2_1n2gf2753hzvkkgxmhre63423j593rypaypazxslsswleq5s3jzg8tr")
+    Address("resource_tdx_2_1n2eq0ud09mujkm56ggnmm37l7xlz239zeyrdsqj2mnqk3hkyqyakj5")
     Bucket("liquidity_receipt_bucket")
 ;
 CALL_METHOD
-    Address("component_tdx_2_1cpkayez9079yy3hjlxy2pvlh9dtw2wc2vvaj4vzelc0s8ww3kxpgck")
+    Address("component_tdx_2_1cpllsc0gh29nd47z7kel96cwjq9ad29f4jpjdclwkth9mrcj3v35v2")
     "remove_liquidity"
     Bucket("liquidity_receipt_bucket")
 ;
@@ -415,7 +415,7 @@ TAKE_ALL_FROM_WORKTOP
     Bucket("lsu_bucket")
 ;
 CALL_METHOD
-    Address("component_tdx_2_1cpkayez9079yy3hjlxy2pvlh9dtw2wc2vvaj4vzelc0s8ww3kxpgck")
+    Address("component_tdx_2_1cpllsc0gh29nd47z7kel96cwjq9ad29f4jpjdclwkth9mrcj3v35v2")
     "market_sell"
     Bucket("lsu_bucket")
 ;
@@ -436,17 +436,17 @@ collect fills from nft 1
 CALL_METHOD
     Address("account_tdx_2_12yqz8dp4gu5wn70k66qqncuhh0hny77tag3ync44w0yrshpxumrj55")
     "withdraw_non_fungibles"
-    Address("resource_tdx_2_1n2gf2753hzvkkgxmhre63423j593rypaypazxslsswleq5s3jzg8tr")
+    Address("resource_tdx_2_1n2eq0ud09mujkm56ggnmm37l7xlz239zeyrdsqj2mnqk3hkyqyakj5")
     Array<NonFungibleLocalId>(
         NonFungibleLocalId("#1#")
     )
 ;
 TAKE_ALL_FROM_WORKTOP
-    Address("resource_tdx_2_1n2gf2753hzvkkgxmhre63423j593rypaypazxslsswleq5s3jzg8tr")
+    Address("resource_tdx_2_1n2eq0ud09mujkm56ggnmm37l7xlz239zeyrdsqj2mnqk3hkyqyakj5")
     Bucket("liquidity_receipt_bucket")
 ;
 CALL_METHOD
-    Address("component_tdx_2_1cpkayez9079yy3hjlxy2pvlh9dtw2wc2vvaj4vzelc0s8ww3kxpgck")
+    Address("component_tdx_2_1cpllsc0gh29nd47z7kel96cwjq9ad29f4jpjdclwkth9mrcj3v35v2")
     "collect_fills"
     Bucket("liquidity_receipt_bucket")
 ;
@@ -465,17 +465,17 @@ collect fills from nft 2
 CALL_METHOD
     Address("account_tdx_2_12yqz8dp4gu5wn70k66qqncuhh0hny77tag3ync44w0yrshpxumrj55")
     "withdraw_non_fungibles"
-    Address("resource_tdx_2_1n2gf2753hzvkkgxmhre63423j593rypaypazxslsswleq5s3jzg8tr")
+    Address("resource_tdx_2_1n2eq0ud09mujkm56ggnmm37l7xlz239zeyrdsqj2mnqk3hkyqyakj5")
     Array<NonFungibleLocalId>(
         NonFungibleLocalId("#2#")
     )
 ;
 TAKE_ALL_FROM_WORKTOP
-    Address("resource_tdx_2_1n2gf2753hzvkkgxmhre63423j593rypaypazxslsswleq5s3jzg8tr")
+    Address("resource_tdx_2_1n2eq0ud09mujkm56ggnmm37l7xlz239zeyrdsqj2mnqk3hkyqyakj5")
     Bucket("liquidity_receipt_bucket")
 ;
 CALL_METHOD
-    Address("component_tdx_2_1cpkayez9079yy3hjlxy2pvlh9dtw2wc2vvaj4vzelc0s8ww3kxpgck")
+    Address("component_tdx_2_1cpllsc0gh29nd47z7kel96cwjq9ad29f4jpjdclwkth9mrcj3v35v2")
     "collect_fills"
     Bucket("liquidity_receipt_bucket")
 ;
@@ -494,17 +494,17 @@ collect fills from nft 3
 CALL_METHOD
     Address("account_tdx_2_12yqz8dp4gu5wn70k66qqncuhh0hny77tag3ync44w0yrshpxumrj55")
     "withdraw_non_fungibles"
-    Address("resource_tdx_2_1n2gf2753hzvkkgxmhre63423j593rypaypazxslsswleq5s3jzg8tr")
+    Address("resource_tdx_2_1n2eq0ud09mujkm56ggnmm37l7xlz239zeyrdsqj2mnqk3hkyqyakj5")
     Array<NonFungibleLocalId>(
         NonFungibleLocalId("#3#")
     )
 ;
 TAKE_ALL_FROM_WORKTOP
-    Address("resource_tdx_2_1n2gf2753hzvkkgxmhre63423j593rypaypazxslsswleq5s3jzg8tr")
+    Address("resource_tdx_2_1n2eq0ud09mujkm56ggnmm37l7xlz239zeyrdsqj2mnqk3hkyqyakj5")
     Bucket("liquidity_receipt_bucket")
 ;
 CALL_METHOD
-    Address("component_tdx_2_1cpkayez9079yy3hjlxy2pvlh9dtw2wc2vvaj4vzelc0s8ww3kxpgck")
+    Address("component_tdx_2_1cpllsc0gh29nd47z7kel96cwjq9ad29f4jpjdclwkth9mrcj3v35v2")
     "collect_fills"
     Bucket("liquidity_receipt_bucket")
 ;
@@ -527,7 +527,7 @@ TAKE_ALL_FROM_WORKTOP
     Bucket("xrd_bucket")
 ;
 CALL_METHOD
-    Address("component_tdx_2_1cpkayez9079yy3hjlxy2pvlh9dtw2wc2vvaj4vzelc0s8ww3kxpgck")
+    Address("component_tdx_2_1cpllsc0gh29nd47z7kel96cwjq9ad29f4jpjdclwkth9mrcj3v35v2")
     "add_liquidity"
     Bucket("xrd_bucket")
     Decimal("0.007")
@@ -557,7 +557,7 @@ TAKE_ALL_FROM_WORKTOP
     Bucket("xrd_bucket")
 ;
 CALL_METHOD
-    Address("component_tdx_2_1cpkayez9079yy3hjlxy2pvlh9dtw2wc2vvaj4vzelc0s8ww3kxpgck")
+    Address("component_tdx_2_1cpllsc0gh29nd47z7kel96cwjq9ad29f4jpjdclwkth9mrcj3v35v2")
     "add_liquidity"
     Bucket("xrd_bucket")
     Decimal("0.015")
@@ -587,7 +587,7 @@ TAKE_ALL_FROM_WORKTOP
     Bucket("xrd_bucket")
 ;
 CALL_METHOD
-    Address("component_tdx_2_1cpkayez9079yy3hjlxy2pvlh9dtw2wc2vvaj4vzelc0s8ww3kxpgck")
+    Address("component_tdx_2_1cpllsc0gh29nd47z7kel96cwjq9ad29f4jpjdclwkth9mrcj3v35v2")
     "add_liquidity"
     Bucket("xrd_bucket")
     Decimal("0.005")
@@ -625,11 +625,11 @@ txid_tdx_2_1y07k3afgs2qnaanjlt58y6c2lc2wp6kq3ldte0c3d04cr3h2xw6smzt834
 CALL_METHOD
     Address("account_tdx_2_12yqz8dp4gu5wn70k66qqncuhh0hny77tag3ync44w0yrshpxumrj55")
     "create_proof_of_amount"
-    Address("resource_tdx_2_1t4duqau5gax6v8mvfv3kj5asyx09cc60sv0mrdq4xy63hxdf8f7qel")
+    Address("resource_tdx_2_1thqy3wpsa4a2v7ym3hhccqresljxc9xyvd0t0mu5xuj7v33hu4xjtg")
     Decimal("1")
 ;
 CALL_METHOD
-    Address("component_tdx_2_1cpkayez9079yy3hjlxy2pvlh9dtw2wc2vvaj4vzelc0s8ww3kxpgck")
+    Address("component_tdx_2_1cpllsc0gh29nd47z7kel96cwjq9ad29f4jpjdclwkth9mrcj3v35v2")
     "set_liquidity_receipt_max_iter"
     25u64
 ;
@@ -787,7 +787,7 @@ TAKE_ALL_FROM_WORKTOP
 ;
 CALL_METHOD
     # Static Liquify component address
-    Address("component_tdx_2_1cpkayez9079yy3hjlxy2pvlh9dtw2wc2vvaj4vzelc0s8ww3kxpgck")
+    Address("component_tdx_2_1cpllsc0gh29nd47z7kel96cwjq9ad29f4jpjdclwkth9mrcj3v35v2")
     "add_liquidity"
     Bucket("xrd_bucket")
     # Connect this decimal to discount % slider
@@ -808,7 +808,7 @@ CALL_METHOD
     Address("account_tdx_2_12yqz8dp4gu5wn70k66qqncuhh0hny77tag3ync44w0yrshpxumrj55")
     "withdraw_non_fungibles"
     # Static address for liquidity_receipt NFT
-    Address("resource_tdx_2_1n2gf2753hzvkkgxmhre63423j593rypaypazxslsswleq5s3jzg8tr")
+    Address("resource_tdx_2_1n2eq0ud09mujkm56ggnmm37l7xlz239zeyrdsqj2mnqk3hkyqyakj5")
     # Connect this NFT ID selection a button in the "Your Orders" section
     Array<NonFungibleLocalId>(
         NonFungibleLocalId("#1#")
@@ -816,12 +816,12 @@ CALL_METHOD
 ;
 TAKE_ALL_FROM_WORKTOP
     # Static address for liquidity_receipt NFT
-    Address("resource_tdx_2_1n2gf2753hzvkkgxmhre63423j593rypaypazxslsswleq5s3jzg8tr")
+    Address("resource_tdx_2_1n2eq0ud09mujkm56ggnmm37l7xlz239zeyrdsqj2mnqk3hkyqyakj5")
     Bucket("liquidity_receipt_bucket")
 ;
 CALL_METHOD
     # Static Liquify component address
-    Address("component_tdx_2_1cpkayez9079yy3hjlxy2pvlh9dtw2wc2vvaj4vzelc0s8ww3kxpgck")
+    Address("component_tdx_2_1cpllsc0gh29nd47z7kel96cwjq9ad29f4jpjdclwkth9mrcj3v35v2")
     "remove_liquidity"
     Bucket("liquidity_receipt_bucket")
 ;
@@ -850,7 +850,7 @@ TAKE_ALL_FROM_WORKTOP
 ;
 CALL_METHOD
     # Static Liquify component address
-    Address("component_tdx_2_1cpkayez9079yy3hjlxy2pvlh9dtw2wc2vvaj4vzelc0s8ww3kxpgck")
+    Address("component_tdx_2_1cpllsc0gh29nd47z7kel96cwjq9ad29f4jpjdclwkth9mrcj3v35v2")
     "market_sell"
     Bucket("lsu_bucket")
 ;
@@ -881,7 +881,7 @@ TAKE_ALL_FROM_WORKTOP
 ;
 CALL_METHOD
     # Static Liquify component address
-    Address("component_tdx_2_1cpkayez9079yy3hjlxy2pvlh9dtw2wc2vvaj4vzelc0s8ww3kxpgck")
+    Address("component_tdx_2_1cpllsc0gh29nd47z7kel96cwjq9ad29f4jpjdclwkth9mrcj3v35v2")
     "collect_fills"
     Bucket("liquidity_receipt_bucket")
 ;
