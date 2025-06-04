@@ -86,7 +86,7 @@ async def main():
     print(f"Using LIQUIFY_LIQUIDITY_RECEIPT: {config.get('LIQUIFY_LIQUIDITY_RECEIPT', 'Not found')}")
 
     # Check what we should do
-    choice = int(input("Choose:\n1) Get funds from faucet\n2) Spam liquidity\n3) Spam unstakes\n4) Collect fills\n5) Burn closed receipts\n"))
+    choice = int(input("Choose:\n1) Get funds from faucet\n2) Spam liquidity\n3) Spam unstakes\n4) Collect fills\n"))
 
     # Get funds
     if choice == 1:
@@ -156,16 +156,6 @@ async def main():
         else:
             print("Exiting now.")
             exit()
-
-    # Burn closed receipts
-    if choice == 5:
-        start_burning_question = input("\n!! Double-check your input !!\n\nStart burning closed receipts? y/n: ")
-    
-        if (start_burning_question.lower() == "y"):
-            await start_burning_closed_receipts(spammer_info)
-        else:
-            print("Exiting now.")
-            exit()                    
 
 #
 # Get funds from the faucet (10k at a time)
@@ -237,7 +227,7 @@ async def start_spamming_liquidity(spammer_info: SpammerInfo, amount_spammed = 0
         # Debug output before building manifest
         print(f"Transaction {transaction_count + 1}: Preparing to add {amount} XRD with {discount/1000:.3f}% discount")
         
-        # Create the manifest - Note this is the key modification
+        # Create the manifest - Updated with new parameters
         manifest_string = f"""
         CALL_METHOD
             Address("component_tdx_2_1cptxxxxxxxxxfaucetxxxxxxxxx000527798379xxxxxxxxxyulkzl")
@@ -260,6 +250,8 @@ async def start_spamming_liquidity(spammer_info: SpammerInfo, amount_spammed = 0
             Bucket("xrd_bucket")
             Decimal("0.{discount:05}")
             {str(auto_unstake).lower()}
+            true
+            Decimal("10000")
         ;
         TAKE_ALL_FROM_WORKTOP
             Address("{liquidity_receipt}")
@@ -399,33 +391,6 @@ async def start_collecting_fills(spammer_info: SpammerInfo) -> None:
     print(f"Done collecting fills")
 
 #
-# Burn closed receipts
-#
-async def start_burning_closed_receipts(spammer_info: SpammerInfo) -> None:
-    spammer_info.current_epoch = await get_current_epoch(spammer_info)
-
-    print("Burning closed receipts...")
-
-    # Build manifest
-    manifest = await build_burn_receipts_manifest(spammer_info)
-    
-    # Build and sign transaction
-    signed_transaction = await build_and_sign_transaction(
-        manifest,
-        spammer_info
-    )
-
-    print(f"{get_timestamp()}: {signed_transaction.intent_hash().as_str()} - Burning closed receipts")
-    
-    # Submit transaction
-    await submit_transaction(
-        signed_transaction,
-        spammer_info
-    )
-
-    print(f"Done burning receipts")
-
-#
 # Returns the current epoch
 #
 async def get_current_epoch(spammer_info: SpammerInfo):
@@ -530,6 +495,8 @@ async def build_liquidity_manifest(spammer_info: SpammerInfo, amount, discount, 
         Bucket("xrd_bucket")
         Decimal("0.{discount:05}")
         {str(auto_unstake).lower()}
+        true
+        Decimal("10000")
     ;
     CALL_METHOD
         Address("{spammer_info.account.as_str()}")
@@ -634,50 +601,6 @@ async def build_collect_fills_manifest(spammer_info: SpammerInfo):
         "collect_fills"
         Bucket("receipt_bucket")
         {number_of_fills}u64
-    ;
-    CALL_METHOD
-        Address("{spammer_info.account.as_str()}")
-        "deposit_batch"
-        Expression("ENTIRE_WORKTOP")
-    ;
-    """
-
-    manifest: TransactionManifest = TransactionManifest(
-        Instructions.from_string(manifest_string, spammer_info.network_number),
-        []
-    )
-    manifest.statically_validate()
-
-    return manifest
-
-#
-# Returns a validated transaction manifest that burns closed receipts
-#
-async def build_burn_receipts_manifest(spammer_info: SpammerInfo):
-    # Get Liquify component and receipt from config
-    liquify_component = spammer_info.config.get('LIQUIFY_COMPONENT', '')
-    liquidity_receipt = spammer_info.config.get('LIQUIFY_LIQUIDITY_RECEIPT', '')
-    
-    manifest_string: str = f"""
-    CALL_METHOD
-        Address("component_tdx_2_1cptxxxxxxxxxfaucetxxxxxxxxx000527798379xxxxxxxxxyulkzl")
-        "lock_fee"
-        Decimal("100")
-    ;
-    CALL_METHOD
-        Address("{spammer_info.account.as_str()}")
-        "withdraw"
-        Address("{liquidity_receipt}")
-        Decimal("1")
-    ;
-    TAKE_ALL_FROM_WORKTOP
-        Address("{liquidity_receipt}")
-        Bucket("receipt_bucket")
-    ;
-    CALL_METHOD
-        Address("{liquify_component}")
-        "burn_closed_receipts"
-        Bucket("receipt_bucket")
     ;
     CALL_METHOD
         Address("{spammer_info.account.as_str()}")
