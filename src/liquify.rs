@@ -1,3 +1,7 @@
+// add in events and event structures
+// add in optimized kvs stuff
+// does the counter incrementing the automate keyvaluestore decrement if something is removed and the end index goes down by 1?
+
 use scrypto::prelude::*;
 use scrypto_avltree::AvlTree;
 
