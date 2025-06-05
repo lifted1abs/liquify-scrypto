@@ -81,6 +81,9 @@ mod liquify_module {
             collect_platform_fees => restrict_to: [owner];
             set_minimum_liquidity => restrict_to: [owner];
             set_receipt_image_url => restrict_to: [owner];
+            get_buy_list_range => PUBLIC;
+            get_liquidity_data_range => PUBLIC;
+            get_automated_liquidity_range => PUBLIC;
         }
     }
 
@@ -221,6 +224,9 @@ mod liquify_module {
                     collect_platform_fees => Free, updatable;
                     set_minimum_liquidity => Free, updatable;
                     set_receipt_image_url => Free, updatable;
+                    get_buy_list_range => Free, updatable;
+                    get_liquidity_data_range => Free, updatable;
+                    get_automated_liquidity_range => Free, updatable;
                 }
             })
             .globalize();
@@ -522,6 +528,71 @@ mod liquify_module {
         pub fn get_claimable_xrd(&self, receipt_id: NonFungibleLocalId) -> Decimal {
             self.calculate_claimable_xrd(&receipt_id)
         }
+
+        // Add these methods to your Liquify impl block
+
+pub fn get_buy_list_range(&self, start_index: u64, count: u64) -> Vec<(u128, NonFungibleGlobalId)> {
+    let mut results = Vec::new();
+    let mut current_index = 0u64;
+    
+    // Iterate through the AVL tree
+    for (key, global_id, _) in self.buy_list.range(0..u128::MAX) {
+        // Skip entries until we reach start_index
+        if current_index < start_index {
+            current_index += 1;
+            continue;
+        }
+        
+        // Stop if we've collected enough entries
+        if results.len() >= count as usize {
+            break;
+        }
+        
+        // Add the actual key and global_id
+        results.push((key, global_id.clone()));
+        
+        current_index += 1;
+    }
+    
+    results
+}
+
+pub fn get_liquidity_data_range(&self, start_index: u64, count: u64) -> Vec<(NonFungibleGlobalId, LiquidityData)> {
+    let mut results = Vec::new();
+    
+    // Since liquidity_data is keyed by NonFungibleGlobalId, we'll iterate through receipt IDs
+    // starting from start_index + 1 (since receipt counter starts at 1)
+    let start_id = start_index + 1;
+    let end_id = std::cmp::min(start_id + count, self.liquidity_receipt_counter);
+    
+    for id in start_id..end_id {
+        let local_id = NonFungibleLocalId::Integer(IntegerNonFungibleLocalId::new(id));
+        let global_id = NonFungibleGlobalId::new(self.liquidity_receipt.address(), local_id);
+        
+        // Check if this global_id exists in our KVS
+        if let Some(liquidity_data) = self.liquidity_data.get(&global_id) {
+            results.push((global_id, liquidity_data.clone()));
+        }
+    }
+    
+    results
+}
+
+pub fn get_automated_liquidity_range(&self, start_index: u64, count: u64) -> Vec<(u64, NonFungibleGlobalId)> {
+    let mut results = Vec::new();
+    
+    // automated_liquidity is indexed from 1 to automated_liquidity_index - 1
+    let start = std::cmp::max(start_index, 1);
+    let end = std::cmp::min(start + count, self.automated_liquidity_index);
+    
+    for index in start..end {
+        if let Some(global_id) = self.automated_liquidity.get(&index) {
+            results.push((index, global_id.clone()));
+        }
+    }
+    
+    results
+}
 
         pub fn get_liquidity_data(&self, receipt_id: NonFungibleLocalId) -> LiquidityData {
             let global_id = NonFungibleGlobalId::new(self.liquidity_receipt.address(), receipt_id);
