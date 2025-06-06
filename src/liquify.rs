@@ -1,6 +1,4 @@
-// add in events and event structures
-// add in optimized kvs stuff
-// does the counter incrementing the automate keyvaluestore decrement if something is removed and the end index goes down by 1?
+// src/liquify.rs
 
 use scrypto::prelude::*;
 use scrypto_avltree::AvlTree;
@@ -178,7 +176,7 @@ mod liquify_module {
                 discounts,
                 total_xrd_volume: Decimal::ZERO,
                 total_xrd_locked: Decimal::ZERO,
-                component_status: true,
+                component_status: false,  // CHANGED: Start in disabled state
                 order_fill_counter: 1,
                 platform_fee: dec!(0.00),
                 fee_vault: Vault::new(XRD),
@@ -248,7 +246,9 @@ mod liquify_module {
             assert!(xrd_bucket.amount() >= self.minimum_liquidity, "This amount is below the minimum liquidity requirement XRD");
             assert!(self.discounts.contains(&discount), "This discount % is not supported");
             
+            // ADDED: Validate auto_refill requires auto_unstake
             if auto_refill {
+                assert!(auto_unstake, "Auto refill can only be enabled when auto unstake is enabled");
                 assert!(refill_threshold >= dec!(10000), "Refill threshold must be at least 10,000 XRD");
             }
         
@@ -361,16 +361,13 @@ mod liquify_module {
             assert!(receipt_bucket.resource_address() == self.liquidity_receipt.address(), "Bucket must contain Liquify liquidity receipt");
             assert!(receipt_bucket.amount() == dec!(1), "Must provide exactly one liquidity receipt");
             
-            if auto_refill {
-                assert!(refill_threshold >= dec!(10000), "Refill threshold must be at least 10,000 XRD");
-            }
-
             let local_id = receipt_bucket.as_non_fungible().non_fungible_local_id();
             let nft_data: LiquidityReceipt = self.liquidity_receipt.get_non_fungible_data(&local_id);
             
-            // Can only automate receipts that have auto_unstake enabled
+            // ENHANCED VALIDATION
             if auto_refill {
-                assert!(nft_data.auto_unstake, "Can only enable automation on receipts with auto_unstake enabled");
+                assert!(nft_data.auto_unstake, "Cannot enable auto refill on a receipt that has auto unstake disabled");
+                assert!(refill_threshold >= dec!(10000), "Refill threshold must be at least 10,000 XRD");
             }
             
             let global_id = NonFungibleGlobalId::new(self.liquidity_receipt.address(), local_id.clone());
@@ -415,8 +412,6 @@ mod liquify_module {
             
             receipt_bucket
         }
-
-
 
         pub fn cycle_liquidity(&mut self, receipt_id: NonFungibleLocalId) -> Bucket {
             let nft_data: LiquidityReceipt = self.liquidity_receipt.get_non_fungible_data(&receipt_id);
@@ -529,70 +524,68 @@ mod liquify_module {
             self.calculate_claimable_xrd(&receipt_id)
         }
 
-        // Add these methods to your Liquify impl block
+        pub fn get_buy_list_range(&self, start_index: u64, count: u64) -> Vec<(u128, NonFungibleGlobalId)> {
+            let mut results = Vec::new();
+            let mut current_index = 0u64;
+            
+            // Iterate through the AVL tree
+            for (key, global_id, _) in self.buy_list.range(0..u128::MAX) {
+                // Skip entries until we reach start_index
+                if current_index < start_index {
+                    current_index += 1;
+                    continue;
+                }
+                
+                // Stop if we've collected enough entries
+                if results.len() >= count as usize {
+                    break;
+                }
+                
+                // Add the actual key and global_id
+                results.push((key, global_id.clone()));
+                
+                current_index += 1;
+            }
+            
+            results
+        }
 
-pub fn get_buy_list_range(&self, start_index: u64, count: u64) -> Vec<(u128, NonFungibleGlobalId)> {
-    let mut results = Vec::new();
-    let mut current_index = 0u64;
-    
-    // Iterate through the AVL tree
-    for (key, global_id, _) in self.buy_list.range(0..u128::MAX) {
-        // Skip entries until we reach start_index
-        if current_index < start_index {
-            current_index += 1;
-            continue;
+        pub fn get_liquidity_data_range(&self, start_index: u64, count: u64) -> Vec<(NonFungibleGlobalId, LiquidityData)> {
+            let mut results = Vec::new();
+            
+            // Since liquidity_data is keyed by NonFungibleGlobalId, we'll iterate through receipt IDs
+            // starting from start_index + 1 (since receipt counter starts at 1)
+            let start_id = start_index + 1;
+            let end_id = std::cmp::min(start_id + count, self.liquidity_receipt_counter);
+            
+            for id in start_id..end_id {
+                let local_id = NonFungibleLocalId::Integer(IntegerNonFungibleLocalId::new(id));
+                let global_id = NonFungibleGlobalId::new(self.liquidity_receipt.address(), local_id);
+                
+                // Check if this global_id exists in our KVS
+                if let Some(liquidity_data) = self.liquidity_data.get(&global_id) {
+                    results.push((global_id, liquidity_data.clone()));
+                }
+            }
+            
+            results
         }
-        
-        // Stop if we've collected enough entries
-        if results.len() >= count as usize {
-            break;
-        }
-        
-        // Add the actual key and global_id
-        results.push((key, global_id.clone()));
-        
-        current_index += 1;
-    }
-    
-    results
-}
 
-pub fn get_liquidity_data_range(&self, start_index: u64, count: u64) -> Vec<(NonFungibleGlobalId, LiquidityData)> {
-    let mut results = Vec::new();
-    
-    // Since liquidity_data is keyed by NonFungibleGlobalId, we'll iterate through receipt IDs
-    // starting from start_index + 1 (since receipt counter starts at 1)
-    let start_id = start_index + 1;
-    let end_id = std::cmp::min(start_id + count, self.liquidity_receipt_counter);
-    
-    for id in start_id..end_id {
-        let local_id = NonFungibleLocalId::Integer(IntegerNonFungibleLocalId::new(id));
-        let global_id = NonFungibleGlobalId::new(self.liquidity_receipt.address(), local_id);
-        
-        // Check if this global_id exists in our KVS
-        if let Some(liquidity_data) = self.liquidity_data.get(&global_id) {
-            results.push((global_id, liquidity_data.clone()));
+        pub fn get_automated_liquidity_range(&self, start_index: u64, count: u64) -> Vec<(u64, NonFungibleGlobalId)> {
+            let mut results = Vec::new();
+            
+            // automated_liquidity is indexed from 1 to automated_liquidity_index - 1
+            let start = std::cmp::max(start_index, 1);
+            let end = std::cmp::min(start + count, self.automated_liquidity_index);
+            
+            for index in start..end {
+                if let Some(global_id) = self.automated_liquidity.get(&index) {
+                    results.push((index, global_id.clone()));
+                }
+            }
+            
+            results
         }
-    }
-    
-    results
-}
-
-pub fn get_automated_liquidity_range(&self, start_index: u64, count: u64) -> Vec<(u64, NonFungibleGlobalId)> {
-    let mut results = Vec::new();
-    
-    // automated_liquidity is indexed from 1 to automated_liquidity_index - 1
-    let start = std::cmp::max(start_index, 1);
-    let end = std::cmp::min(start + count, self.automated_liquidity_index);
-    
-    for index in start..end {
-        if let Some(global_id) = self.automated_liquidity.get(&index) {
-            results.push((index, global_id.clone()));
-        }
-    }
-    
-    results
-}
 
         pub fn get_liquidity_data(&self, receipt_id: NonFungibleLocalId) -> LiquidityData {
             let global_id = NonFungibleGlobalId::new(self.liquidity_receipt.address(), receipt_id);
