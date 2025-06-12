@@ -26,6 +26,51 @@ pub struct LiquidityData {
     last_added_epoch: u32,
 }
 
+#[derive(ScryptoSbor, ScryptoEvent)]
+struct LiquidityAddedEvent {
+    receipt_id: NonFungibleLocalId,
+    xrd_amount: Decimal,
+    discount: Decimal,
+    auto_unstake: bool,
+    auto_refill: bool,
+    refill_threshold: Decimal,
+}
+
+#[derive(ScryptoSbor, ScryptoEvent)]
+struct LiquidityIncreasedEvent {
+    receipt_id: NonFungibleLocalId,
+    additional_xrd: Decimal,
+}
+
+#[derive(ScryptoSbor, ScryptoEvent)]
+struct OrderFillEvent {
+    receipt_id: NonFungibleLocalId,
+    lsu_amount: Decimal,
+    xrd_amount: Decimal,
+    discount: Decimal,
+}
+
+#[derive(ScryptoSbor, ScryptoEvent)]
+struct LiquifyUnstakeEvent {
+    lsu_resource: ResourceAddress,
+    lsu_amount: Decimal,
+    xrd_received: Decimal,
+}
+
+#[derive(ScryptoSbor, ScryptoEvent)]
+struct LiquidityRemovedEvent {
+    receipt_id: NonFungibleLocalId,
+    xrd_amount: Decimal,
+}
+
+#[derive(ScryptoSbor, ScryptoEvent)]
+struct CollectFillsEvent {
+    receipt_id: NonFungibleLocalId,
+    fills_collected: u64,
+    lsus_collected: Vec<(Decimal, ResourceAddress)>,
+    stake_claim_nfts_collected: Vec<NonFungibleGlobalId>,
+}
+
 #[derive(PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub struct CombinedKey {
     key: u128,
