@@ -69,6 +69,20 @@ struct CollectFillsEvent {
     stake_claim_nfts_collected: Vec<NonFungibleGlobalId>,
 }
 
+#[derive(ScryptoSbor, ScryptoEvent)]
+struct LiquidityCycledEvent {
+    receipt_id: NonFungibleLocalId,
+    xrd_amount_cycled: Decimal,
+    automation_fee: Decimal,
+}
+
+#[derive(ScryptoSbor, ScryptoEvent)]
+struct AutomationUpdatedEvent {
+    receipt_id: NonFungibleLocalId,
+    auto_refill: bool,
+    refill_threshold: Decimal,
+}
+
 #[derive(PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub struct CombinedKey {
     key: u128,
@@ -102,6 +116,16 @@ pub struct LSUData {
 
 #[blueprint]
 #[types(Decimal, ResourceAddress, LiquidityReceipt, LiquidityData, NonFungibleLocalId, NonFungibleGlobalId, ComponentAddress, i64, u64, Vault)]
+#[events(
+    LiquifyUnstakeEvent,
+    OrderFillEvent, 
+    LiquidityAddedEvent,
+    LiquidityIncreasedEvent,
+    LiquidityRemovedEvent,
+    CollectFillsEvent,
+    LiquidityCycledEvent,
+    AutomationUpdatedEvent
+)]
 mod liquify_module {
     enable_method_auth! {
         roles {
@@ -215,8 +239,8 @@ mod liquify_module {
                 liquidity_receipt_counter: 1,
                 buy_list: AvlTree::new(),
                 order_fill_tree: AvlTree::new(),
-                component_vaults: KeyValueStore::new(),
-                liquidity_data: KeyValueStore::new(),
+                component_vaults: KeyValueStore::new_with_registered_type(),
+                liquidity_data: KeyValueStore::new_with_registered_type(),
                 liquidity_index,
                 discounts,
                 total_xrd_volume: Decimal::ZERO,
@@ -228,7 +252,7 @@ mod liquify_module {
                 minimum_liquidity: dec!(10000),
                 receipt_image_url: Url::of("https://bafybeib7cokm27lwwkunaibn7hczijn3ztkypbzttmt7hymaov44s5e5sm.ipfs.w3s.link/liquify2.png"),
                 automation_fee: dec!(5),
-                automated_liquidity: KeyValueStore::new(),
+                automated_liquidity: KeyValueStore::new_with_registered_type(),
                 automated_liquidity_index: 1,
             }
             .instantiate()
@@ -331,7 +355,7 @@ mod liquify_module {
             
             self.liquidity_receipt_counter += 1;
         
-            self.buy_list.insert(combined_key.key, global_id);
+            self.buy_list.insert(combined_key.key, global_id.clone());
         
             let index_usize = match (discount / dec!(0.00025)).checked_floor().unwrap().to_string().parse::<usize>() {
                 Ok(index) => index,
@@ -342,6 +366,16 @@ mod liquify_module {
             self.liquidity_index[index_usize] = currently_liquidity_at_discount + xrd_bucket.amount();
         
             self.total_xrd_locked += xrd_bucket.amount();
+            
+            Runtime::emit_event(LiquidityAddedEvent {
+                receipt_id: global_id.local_id().clone(),
+                xrd_amount: xrd_bucket.amount(),
+                discount,
+                auto_unstake,
+                auto_refill,
+                refill_threshold,
+            });
+
             self.xrd_liquidity.put(xrd_bucket);
         
             new_liquidity_receipt
