@@ -385,12 +385,17 @@ mod liquify_module {
             assert!(receipt_bucket.resource_address() == self.liquidity_receipt.address(), "Bucket must contain Liquify liquidity receipt");
             assert!(receipt_bucket.amount() == dec!(1), "Must provide exactly one liquidity receipt");
             assert!(xrd_bucket.resource_address() == XRD, "Bucket must contain XRD");
-            assert!(xrd_bucket.amount() >= self.minimum_liquidity, "This amount is below the minimum liquidity requirement");
-
+            
             let local_id = receipt_bucket.as_non_fungible().non_fungible_local_id();
             let nft_data: LiquidityReceipt = self.liquidity_receipt.get_non_fungible_data(&local_id);
             let global_id = NonFungibleGlobalId::new(self.liquidity_receipt.address(), local_id.clone());
             let mut kvs_data = self.liquidity_data.get_mut(&global_id).unwrap();
+            
+            // Check that current + new liquidity meets minimum requirement
+            assert!(
+                kvs_data.xrd_liquidity_available + xrd_bucket.amount() >= self.minimum_liquidity, 
+                "Total liquidity after increase would be below the minimum liquidity requirement"
+            );
             
             // Get current discount
             let discount_u64 = (nft_data.discount * dec!(10000)).checked_floor().unwrap().to_string().parse::<u64>().unwrap();
