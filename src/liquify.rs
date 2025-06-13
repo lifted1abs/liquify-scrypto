@@ -442,6 +442,9 @@ mod liquify_module {
             
             let local_id = receipt_bucket.as_non_fungible().non_fungible_local_id();
             let nft_data: LiquidityReceipt = self.liquidity_receipt.get_non_fungible_data(&local_id);
+            let xrd_liquidity_available = self.liquidity_data.get(&NonFungibleGlobalId::new(self.liquidity_receipt.address(), local_id.clone())).unwrap().xrd_liquidity_available;
+
+            assert!(refill_threshold <= xrd_liquidity_available, "Refill threshold cannot exceed available liquidity");
             
             // ENHANCED VALIDATION
             if auto_refill {
