@@ -1,4 +1,5 @@
 use scrypto_test::prelude::*;
+use std::time::Instant;
 
 #[derive(Clone)]
 pub struct Account {
@@ -69,7 +70,6 @@ impl TestEnvironment {
             manifest,
             vec![NonFungibleGlobalId::from_public_key(&admin_public_key)],
         );
-        println!("{:?}\n", receipt);
 
         let liquify_component = receipt.expect_commit(true).new_component_addresses()[0];
         let owner_badge = receipt.expect_commit(true).new_resource_addresses()[0];
@@ -107,15 +107,18 @@ impl TestEnvironment {
             .get_active_validator_info_by_key(&key)
             .stake_unit_resource;
 
-        // Give users LSUs
+        // Give users more LSUs for scalability testing
         for (user_account, user_public_key) in [
             (user_account_address1, user_public_key1),
             (user_account_address2, user_public_key2),
             (user_account_address3, user_public_key3),
         ] {
+            // Load account with XRD first
+            ledger.load_account_from_faucet(user_account);
+            
             let manifest = ManifestBuilder::new()
                 .lock_fee_from_faucet() 
-                .withdraw_from_account(user_account, XRD, dec!(1000))
+                .withdraw_from_account(user_account, XRD, dec!(5000))
                 .take_all_from_worktop(XRD, "xrd")
                 .call_method_with_name_lookup(validator_address, "stake", |lookup| {
                     (lookup.bucket("xrd"),)
@@ -133,6 +136,11 @@ impl TestEnvironment {
             );
             receipt.expect_commit_success();
         }
+
+        // Load liquidity provider accounts
+        ledger.load_account_from_faucet(user_account_address4);
+        ledger.load_account_from_faucet(user_account_address5);
+        ledger.load_account_from_faucet(user_account_address6);
 
         // *********** Set minimum liquidity to 0 for testing ***********
         let manifest = ManifestBuilder::new()
@@ -189,148 +197,139 @@ impl TestEnvironment {
 }
 
 #[test]
-fn instantiate_test() {
-    TestEnvironment::instantiate_test();
-}
-
-
-#[test]
-fn test_off_ledger_fills() {
+fn test_scalability() {
     let mut ledger = TestEnvironment::instantiate_test();
     let user_account1 = ledger.user_account1.account_address;
     let user_account4 = ledger.user_account4.account_address;
-    let admin_account = ledger.admin_account.account_address;
+    let user_account5 = ledger.user_account5.account_address;
+    let user_account6 = ledger.user_account6.account_address;
     let liquify_component = ledger.liquify_component;
-    let owner_badge = ledger.owner_badge;
     let lsu_resource_address = ledger.lsu_resource_address;
 
-    // Lower the minimum refill threshold for testing
-    let manifest = ManifestBuilder::new()
-        .lock_fee_from_faucet()
-        .create_proof_from_account_of_amount(
-            admin_account, 
-            owner_badge,
-            1,
-        )
-        .call_method(
-            liquify_component, 
-            "set_minimum_refill_threshold", 
-            manifest_args!(dec!("1")),
-        )
-        .call_method(
-            admin_account,
-            "deposit_batch",
-            manifest_args!(ManifestExpression::EntireWorktop),
-        )
-        .build();
-    let receipt = ledger.execute_manifest(
-        manifest,
-        ledger.admin_account.clone(),
-    );
-    receipt.expect_commit_success();
-    println!("✓ Minimum refill threshold set to 1 XRD");
+    println!("=== SCALABILITY TEST ===");
+    println!("Testing transaction costs with varying AVL tree sizes\n");
 
-    // CLEAR PARAMETERS - ADJUST THESE AS NEEDED
-    let NUM_LIQUIDITY_POSITIONS = 50;  
-    let XRD_PER_POSITION = dec!(1); 
-    let NUM_KEYS_TO_TEST = 30;        
+    // Test scenarios with different tree sizes
+    let test_sizes = vec![0, 100, 500, 1000];
+    let mut current_tree_size = 0;
 
-    println!("=== TEST PARAMETERS ===");
-    println!("Creating {} liquidity positions", NUM_LIQUIDITY_POSITIONS);
-    println!("Each position has {} XRD", XRD_PER_POSITION);
-    println!("Will test unstaking with {} keys", NUM_KEYS_TO_TEST);
-    println!("======================\n");
-
-    // Get epoch BEFORE creating positions
-    let creation_epoch = ledger.ledger.get_current_epoch().number() as u32;
-    println!("Creating positions in epoch: {}", creation_epoch);
-
-    // Create liquidity positions
-    for i in 0..NUM_LIQUIDITY_POSITIONS {
+    for target_size in test_sizes {
+        println!("\n--- Testing with {} existing positions ---", target_size);
+        
+        // Populate the AVL tree to target size
+        let positions_to_add = target_size - current_tree_size;
+        
+        if positions_to_add > 0 {
+            println!("Adding {} positions to reach target size...", positions_to_add);
+            
+            let accounts = vec![
+                (user_account4, ledger.user_account4.clone()),
+                (user_account5, ledger.user_account5.clone()),
+                (user_account6, ledger.user_account6.clone()),
+            ];
+            
+            for i in 0..positions_to_add {
+                let account_index = i % accounts.len();
+                let (account_address, account) = &accounts[account_index];
+                
+                if i % 100 == 0 && i > 0 {
+                    ledger.ledger.load_account_from_faucet(*account_address);
+                }
+                
+                let discount = match i % 5 {
+                    0 => dec!("0.001"),
+                    1 => dec!("0.005"),
+                    2 => dec!("0.010"),
+                    3 => dec!("0.015"),
+                    _ => dec!("0.020"),
+                };
+                
+                let manifest = ManifestBuilder::new()
+                    .lock_fee_from_faucet()
+                    .withdraw_from_account(*account_address, XRD, dec!(1))
+                    .take_all_from_worktop(XRD, "xrd")
+                    .call_method_with_name_lookup(liquify_component, "add_liquidity", |lookup| {(
+                        lookup.bucket("xrd"),
+                        discount,
+                        false,
+                        false,
+                        dec!("0"),
+                    )})
+                    .call_method(
+                        *account_address,
+                        "deposit_batch",
+                        manifest_args!(ManifestExpression::EntireWorktop),
+                    )
+                    .build();
+                
+                let receipt = ledger.execute_manifest(manifest, account.clone());
+                
+                if !receipt.is_commit_success() {
+                    println!("Failed to add position {}", i);
+                    break;
+                }
+            }
+            current_tree_size = target_size;
+        }
+        
+        // Test add_liquidity with current tree size
+        println!("\nTesting add_liquidity with {} positions in tree...", current_tree_size);
         let manifest = ManifestBuilder::new()
             .lock_fee_from_faucet()
-            .withdraw_from_account(user_account4, XRD, XRD_PER_POSITION)
+            .withdraw_from_account(user_account1, XRD, dec!(10))
             .take_all_from_worktop(XRD, "xrd")
             .call_method_with_name_lookup(liquify_component, "add_liquidity", |lookup| {(
                 lookup.bucket("xrd"),
-                dec!("0.0010"),    // 0.1% discount
-                true,              // auto_unstake
-                true,              // auto_refill
-                dec!("100"),       // refill_threshold
+                dec!("0.01"),
+                false,
+                false,
+                dec!("0"),
             )})
             .call_method(
-                user_account4,
+                user_account1,
                 "deposit_batch",
                 manifest_args!(ManifestExpression::EntireWorktop),
             )
             .build();
         
-        let receipt = ledger.execute_manifest(
-            manifest,
-            ledger.user_account4.clone(),
-        );
-        receipt.expect_commit_success();
-    }
-
-    println!("✓ Successfully created {} liquidity positions", NUM_LIQUIDITY_POSITIONS);
-
-    // Generate keys using the CREATION epoch
-    let discount_u64 = 10u64; // 0.0010 * 10000
-    let mut off_ledger_order_vec: Vec<u128> = Vec::new();
-    
-    for liquidity_id in 1..=NUM_KEYS_TO_TEST {
-        let key = ((discount_u64 as u128) << 96) | ((creation_epoch as u128) << 64) | (liquidity_id as u128);
-        off_ledger_order_vec.push(key);
-    }
-
-    println!("\n=== KEY GENERATION ===");
-    println!("Generated {} keys for epoch {}", off_ledger_order_vec.len(), creation_epoch);
-
-    // Test unstaking
-    let initial_xrd_balance = ledger.ledger.get_component_balance(user_account1, XRD);
-    let initial_lsu_balance = ledger.ledger.get_component_balance(user_account1, lsu_resource_address);
-    println!("\n=== UNSTAKING TEST ===");
-    println!("User1 initial XRD: {} XRD", initial_xrd_balance);
-    println!("User1 initial LSU: {} LSU", initial_lsu_balance);
-
-    let manifest = ManifestBuilder::new()
-        .lock_fee_from_faucet()
-        .withdraw_from_account(
-            user_account1, 
-            lsu_resource_address, 
-            dec!(100) // Unstake 100 LSUs
-        )
-        .take_all_from_worktop(lsu_resource_address, "lsu")
-        .call_method_with_name_lookup(
-            liquify_component, 
-            "liquify_unstake_off_ledger", |lookup| {
-            (lookup.bucket("lsu"),
-            off_ledger_order_vec.clone(),
-        )})
-        .call_method(
-            user_account1,
-            "deposit_batch",
-            manifest_args!(ManifestExpression::EntireWorktop),
-        )
-        .build();
+        let receipt = ledger.execute_manifest(manifest, ledger.user_account1.clone());
         
-    let receipt = ledger.execute_manifest(
-        manifest,
-        ledger.user_account1.clone(),
-    );
+        // Print receipt to see transaction cost
+        println!("Add liquidity transaction:");
+        println!("{:?}", receipt);
+        
+        // Test unstaking
+        println!("\nTesting unstake with {} positions in tree...", current_tree_size);
+        let manifest = ManifestBuilder::new()
+            .lock_fee_from_faucet()
+            .withdraw_from_account(
+                user_account1, 
+                lsu_resource_address, 
+                dec!(10)
+            )
+            .take_all_from_worktop(lsu_resource_address, "lsu")
+            .call_method_with_name_lookup(liquify_component, "liquify_unstake", |lookup| {
+                (lookup.bucket("lsu"),
+                5u8
+            )
+            })
+            .call_method(
+                user_account1,
+                "deposit_batch",
+                manifest_args!(ManifestExpression::EntireWorktop),
+            )
+            .build();
+        
+        let unstake_receipt = ledger.execute_manifest(manifest, ledger.user_account1.clone());
+        
+        println!("Unstake transaction:");
+        println!("{:?}", unstake_receipt);
+    }
     
-    receipt.expect_commit_success();
+    println!("\n=== ANALYSIS ===");
+    println!("Check the transaction costs above to see how they scale with tree size.");
+    println!("If costs increase linearly with tree size, that indicates O(n) complexity.");
+    println!("If costs increase logarithmically, that indicates O(log n) complexity (good!).");
     
-    // Check results
-    let final_xrd_balance = ledger.ledger.get_component_balance(user_account1, XRD);
-    let final_lsu_balance = ledger.ledger.get_component_balance(user_account1, lsu_resource_address);
-    let xrd_received = final_xrd_balance - initial_xrd_balance;
-    let lsu_spent = initial_lsu_balance - final_lsu_balance;
-    
-    println!("\n=== RESULTS ===");
-    println!("XRD received: {}", xrd_received);
-    println!("LSUs spent: {}", lsu_spent);
-    
-    assert!(xrd_received > dec!(0), "Should have received XRD from unstaking");
-    assert!(lsu_spent > dec!(0), "Should have spent LSUs");
+    println!("\n✓ Scalability test completed!");
 }

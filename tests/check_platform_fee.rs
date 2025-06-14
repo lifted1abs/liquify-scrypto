@@ -17,7 +17,6 @@ pub struct TestEnvironment {
     pub user_account6: Account,
     pub package_address: PackageAddress,
     pub liquify_component: ComponentAddress,
-    pub liquify_interface_component: ComponentAddress,
     pub owner_badge: ResourceAddress,
     pub liquidity_receipt: ResourceAddress,
     pub lsu_resource_address: ResourceAddress,
@@ -51,29 +50,6 @@ impl TestEnvironment {
 
         let package_address = ledger.compile_and_publish(this_package!());
 
-        // *********** Instantiate Interface component ***********
-        let manifest = ManifestBuilder::new()
-            .lock_fee_from_faucet()
-            .call_function(
-                package_address,
-                "LiquifyInterface",
-                "instantiate_interface",
-                manifest_args!(),
-            )
-            .call_method(
-                admin_account_address,
-                "deposit_batch",
-                manifest_args!(ManifestExpression::EntireWorktop),
-            )
-            .build();
-        let receipt = ledger.execute_manifest(
-            manifest,
-            vec![NonFungibleGlobalId::from_public_key(&admin_public_key)],
-        );
-        println!("{:?}\n", receipt);
-
-        let interface_component = receipt.expect_commit(true).new_component_addresses()[0];
-
         // *********** Instantiate Liquify component ***********
         let manifest = ManifestBuilder::new()
             .lock_fee_from_faucet()
@@ -93,32 +69,10 @@ impl TestEnvironment {
             manifest,
             vec![NonFungibleGlobalId::from_public_key(&admin_public_key)],
         );
-        println!("{:?}\n", receipt);
 
         let liquify_component = receipt.expect_commit(true).new_component_addresses()[0];
         let owner_badge = receipt.expect_commit(true).new_resource_addresses()[0];
         let liquidity_receipt = receipt.expect_commit(true).new_resource_addresses()[1];
-
-        // *********** Set interface target ***********
-        let manifest = ManifestBuilder::new()
-            .lock_fee_from_faucet()
-            .call_method(
-                interface_component, 
-                "set_interface_target", 
-                manifest_args!(liquify_component),
-            )
-            .call_method(
-                admin_account_address,
-                "deposit_batch",
-                manifest_args!(ManifestExpression::EntireWorktop),
-            )
-            .build();
-        let receipt = ledger.execute_manifest(
-            manifest,
-            vec![NonFungibleGlobalId::from_public_key(&admin_public_key)],
-        );
-        println!("{:?}\n", receipt);
-        receipt.expect_commit_success();
 
         // *********** Enable the component (it starts disabled) ***********
         let manifest = ManifestBuilder::new()
@@ -179,7 +133,7 @@ impl TestEnvironment {
             receipt.expect_commit_success();
         }
 
-        // *********** Set minimum liquidity to 0 ***********
+        // *********** Set minimum liquidity to 0 for testing ***********
         let manifest = ManifestBuilder::new()
             .lock_fee_from_faucet()
             .create_proof_from_account_of_amount(
@@ -203,66 +157,7 @@ impl TestEnvironment {
             vec![NonFungibleGlobalId::from_public_key(&admin_public_key)],
         );
         receipt.expect_commit_success();
-
-        // *********** Set minimum refill threshold to 1 ***********
-        let manifest = ManifestBuilder::new()
-            .lock_fee_from_faucet()
-            .create_proof_from_account_of_amount(
-                admin_account_address, 
-                owner_badge,
-                1,
-            )
-            .call_method(
-                liquify_component, 
-                "set_minimum_refill_threshold", 
-                manifest_args!(dec!("1")),
-            )
-            .call_method(
-                admin_account_address,
-                "deposit_batch",
-                manifest_args!(ManifestExpression::EntireWorktop),
-            )
-            .build();
-        let receipt = ledger.execute_manifest(
-            manifest,
-            vec![NonFungibleGlobalId::from_public_key(&admin_public_key)],
-        );
-        receipt.expect_commit_success();
-
-        // *********** Add liquidity through interface ***********
-        for _ in 0..30 {
-            for (discount, auto_unstake, auto_refill) in [
-                (dec!("0.010"), true, false),
-                (dec!("0.020"), true, false),
-                (dec!("0.025"), true, true),
-            ] {
-                let refill_threshold = if auto_refill { dec!("10") } else { dec!("0") };
-                
-                let manifest = ManifestBuilder::new()
-                    .lock_fee_from_faucet()
-                    .withdraw_from_account(user_account_address4, XRD, dec!(1))
-                    .take_all_from_worktop(XRD, "xrd")
-                    .call_method_with_name_lookup(interface_component, "add_liquidity", |lookup| {(
-                        lookup.bucket("xrd"),
-                        discount,
-                        auto_unstake,
-                        auto_refill,
-                        refill_threshold,
-                    )})
-                    .call_method(
-                        user_account_address4,
-                        "deposit_batch",
-                        manifest_args!(ManifestExpression::EntireWorktop),
-                    )
-                    .build();
-                let receipt = ledger.execute_manifest(
-                    manifest,
-                    vec![NonFungibleGlobalId::from_public_key(&user_public_key4)],
-                );
-                receipt.expect_commit_success();
-            }
-        }
-        
+   
         Self {
             ledger,
             admin_account,
@@ -274,7 +169,6 @@ impl TestEnvironment {
             user_account6,
             package_address,
             liquify_component,
-            liquify_interface_component: interface_component,
             owner_badge,
             liquidity_receipt,
             lsu_resource_address,
@@ -294,46 +188,97 @@ impl TestEnvironment {
 }
 
 #[test]
-fn instantiate_test() {
-    TestEnvironment::instantiate_test();
-}
-
-#[test]
-fn test_interface_iterations() {
+fn test_platform_fees() {
     let mut ledger = TestEnvironment::instantiate_test();
+    let admin_account_address = ledger.admin_account.account_address;
     let user_account1 = ledger.user_account1.account_address;
-    let liquify_interface_component = ledger.liquify_interface_component;
+    let user_account4 = ledger.user_account4.account_address;
+    let liquify_component = ledger.liquify_component;
+    let owner_badge = ledger.owner_badge;
     let lsu_resource_address = ledger.lsu_resource_address;
 
-    println!("=== TEST PARAMETERS ===");
-    println!("Testing interface with 30 max iterations");
-    println!("90 liquidity positions created (30 each at 1%, 2%, 2.5% discount)");
-    println!("======================\n");
+    // CLEAR PARAMETERS
+    let PLATFORM_FEE = dec!("0.005");  // 0.5% platform fee
+    let LIQUIDITY_AMOUNT = dec!(1000); // 1000 XRD per position
+    let NUM_POSITIONS = 5;
+    let UNSTAKE_AMOUNT = dec!(1000);  // LSUs to unstake
 
-    // Get initial balances
-    let initial_xrd_balance = ledger.ledger.get_component_balance(user_account1, XRD);
-    let initial_lsu_balance = ledger.ledger.get_component_balance(user_account1, lsu_resource_address);
-    println!("=== INITIAL BALANCES ===");
-    println!("User1 initial XRD: {} XRD", initial_xrd_balance);
-    println!("User1 initial LSU: {} LSU", initial_lsu_balance);
+    println!("=== PLATFORM FEE TEST ===");
+    println!("Platform fee: {}%", PLATFORM_FEE * dec!(100));
+    println!("Creating {} positions with {} XRD each", NUM_POSITIONS, LIQUIDITY_AMOUNT);
+    println!("Will unstake {} LSUs", UNSTAKE_AMOUNT);
+    println!("========================\n");
 
-    // Test unstaking through interface with iteration limit
-    let lsu_to_unstake = dec!(1000);
-    println!("\n=== UNSTAKING TEST ===");
-    println!("Attempting to unstake {} LSUs through interface", lsu_to_unstake);
-    println!("Max iterations: 30");
-    
+    // Set platform fee
+    let manifest = ManifestBuilder::new()
+        .lock_fee_from_faucet()
+        .create_proof_from_account_of_amount(
+            admin_account_address, 
+            owner_badge,
+            1,
+        )
+        .call_method(
+            liquify_component, 
+            "set_platform_fee", 
+            manifest_args!(PLATFORM_FEE),
+        )
+        .call_method(
+            admin_account_address,
+            "deposit_batch",
+            manifest_args!(ManifestExpression::EntireWorktop),
+        )
+        .build();
+    let receipt = ledger.execute_manifest(
+        manifest,
+        ledger.admin_account.clone(),
+    );
+    receipt.expect_commit_success();
+    println!("✓ Platform fee set to {}%", PLATFORM_FEE * dec!(100));
+
+    // Create liquidity positions
+    for i in 0..NUM_POSITIONS {
+        let manifest = ManifestBuilder::new()
+            .lock_fee_from_faucet()
+            .withdraw_from_account(user_account4, XRD, LIQUIDITY_AMOUNT)
+            .take_all_from_worktop(XRD, "xrd")
+            .call_method_with_name_lookup(liquify_component, "add_liquidity", |lookup| {(
+                lookup.bucket("xrd"),
+                dec!("0.01"),     // 1% discount
+                false,            // auto_unstake
+                false,            // auto_refill
+                dec!("0"),        // refill_threshold
+            )})
+            .call_method(
+                user_account4,
+                "deposit_batch",
+                manifest_args!(ManifestExpression::EntireWorktop),
+            )
+            .build();
+        
+        let receipt = ledger.execute_manifest(
+            manifest,
+            ledger.user_account4.clone(),
+        );
+        receipt.expect_commit_success();
+    }
+    println!("✓ Created {} liquidity positions", NUM_POSITIONS);
+
+    // Track XRD balance before unstaking
+    let user1_xrd_before = ledger.ledger.get_component_balance(user_account1, XRD);
+    println!("\nUser1 XRD before unstaking: {}", user1_xrd_before);
+
+    // Perform unstaking
     let manifest = ManifestBuilder::new()
         .lock_fee_from_faucet()
         .withdraw_from_account(
             user_account1, 
             lsu_resource_address, 
-            lsu_to_unstake
+            UNSTAKE_AMOUNT
         )
         .take_all_from_worktop(lsu_resource_address, "lsu")
-        .call_method_with_name_lookup(liquify_interface_component, "liquify_unstake", |lookup| {
+        .call_method_with_name_lookup(liquify_component, "liquify_unstake", |lookup| {
             (lookup.bucket("lsu"),
-            30u8  // max_iterations for interface
+            30u8  // max_iterations
         )
         })
         .call_method(
@@ -347,43 +292,75 @@ fn test_interface_iterations() {
         manifest,
         ledger.user_account1.clone(),
     );
+    receipt.expect_commit_success();
+
+    // Calculate actual amounts
+    let user1_xrd_after = ledger.ledger.get_component_balance(user_account1, XRD);
+    let xrd_received = user1_xrd_after - user1_xrd_before;
     
-    // Check if transaction succeeded
-    if receipt.is_commit_success() {
-        println!("\n✓ SUCCESS: Interface unstaking completed!");
-        
-        // Calculate results
-        let final_xrd_balance = ledger.ledger.get_component_balance(user_account1, XRD);
-        let final_lsu_balance = ledger.ledger.get_component_balance(user_account1, lsu_resource_address);
-        let xrd_received = final_xrd_balance - initial_xrd_balance;
-        let lsu_spent = initial_lsu_balance - final_lsu_balance;
-        
-        println!("\n=== RESULTS ===");
-        println!("XRD received: {} XRD", xrd_received);
-        println!("LSUs spent: {} LSU", lsu_spent);
-        println!("LSUs returned: {} LSU", lsu_to_unstake - lsu_spent);
-        
-        // Calculate effective discount
-        if lsu_spent > dec!(0) {
-            let redemption_value = lsu_spent; // Assuming 1:1 redemption rate
-            let effective_discount = (redemption_value - xrd_received) / redemption_value * dec!(100);
-            println!("Effective discount: {}%", effective_discount);
-        }
-        
-        println!("\n=== FINAL BALANCES ===");
-        println!("User1 final XRD: {} XRD", final_xrd_balance);
-        println!("User1 final LSU: {} LSU", final_lsu_balance);
-        
-        // Show approximate positions filled
-        if lsu_spent > dec!(0) {
-            let approx_positions = lsu_spent / dec!(10);
-            println!("\nApproximate positions filled: {} (assuming 10 XRD positions)", approx_positions);
-        }
-        
-        assert!(xrd_received > dec!(0), "Should have received XRD from unstaking");
-        assert!(lsu_spent > dec!(0), "Should have spent LSUs");
+    println!("\n=== UNSTAKING RESULTS ===");
+    println!("XRD received by user: {}", xrd_received);
+    
+    // Calculate expected values
+    // With 1% discount, user pays 990 XRD for 1000 LSUs
+    // Platform fee is 0.5% of 990 = 4.95 XRD
+    let liquidity_used = dec!(990); // 1000 LSUs with 1% discount
+    let expected_platform_fee = liquidity_used * PLATFORM_FEE;
+    let expected_user_receives = liquidity_used - expected_platform_fee;
+    
+    println!("\nExpected platform fee: {} XRD", expected_platform_fee);
+    println!("Expected user receives: {} XRD", expected_user_receives);
+    println!("Actual user received: {} XRD", xrd_received);
+    
+    // Verify fee calculation (check if difference is small)
+    let fee_difference = if expected_user_receives > xrd_received {
+        expected_user_receives - xrd_received
     } else {
-        println!("\n✗ FAILED: Interface unstaking failed!");
-        println!("Error: {:?}", receipt.expect_rejection());
-    }
+        xrd_received - expected_user_receives
+    };
+    assert!(fee_difference < dec!("0.001"), "Fee calculation mismatch! Expected {} but got {}", expected_user_receives, xrd_received);
+
+    // Collect platform fees
+    let admin_xrd_before = ledger.ledger.get_component_balance(admin_account_address, XRD);
+    
+    let manifest = ManifestBuilder::new()
+        .lock_fee_from_faucet()
+        .create_proof_from_account_of_amount(
+            admin_account_address, 
+            owner_badge,
+            1,
+        )
+        .call_method(
+            liquify_component, 
+            "collect_platform_fees", 
+            manifest_args!(),
+        )
+        .call_method(
+            admin_account_address,
+            "deposit_batch",
+            manifest_args!(ManifestExpression::EntireWorktop),
+        )
+        .build();
+    let receipt = ledger.execute_manifest(
+        manifest,
+        ledger.admin_account.clone(),
+    );
+    receipt.expect_commit_success();
+
+    let admin_xrd_after = ledger.ledger.get_component_balance(admin_account_address, XRD);
+    let fees_collected = admin_xrd_after - admin_xrd_before;
+    
+    println!("\n=== FEE COLLECTION ===");
+    println!("Fees collected: {} XRD", fees_collected);
+    println!("Expected fees: {} XRD", expected_platform_fee);
+    
+    // Verify collected fees match expected
+    let collected_difference = if fees_collected > expected_platform_fee {
+        fees_collected - expected_platform_fee
+    } else {
+        expected_platform_fee - fees_collected
+    };
+    assert!(collected_difference < dec!("0.001"), "Collected fees mismatch! Expected {} but got {}", expected_platform_fee, fees_collected);
+    
+    println!("\n✓ Platform fee test passed!");
 }

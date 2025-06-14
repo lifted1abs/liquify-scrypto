@@ -350,7 +350,7 @@ mod liquify_module {
             // ADDED: Validate auto_refill requires auto_unstake
             if auto_refill {
                 assert!(auto_unstake, "Auto refill can only be enabled when auto unstake is enabled");
-                assert!(refill_threshold >= dec!(10000), "Refill threshold must be at least 10,000 XRD");
+                assert!(refill_threshold >= self.minimum_refill_threshold, "Refill threshold is below required minimum");
             }
         
             let discount_u64 = (discount * dec!(10000)).checked_floor().unwrap().to_string().parse::<u64>().unwrap();
