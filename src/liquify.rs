@@ -180,6 +180,22 @@ mod liquify_module {
 
     impl Liquify {
 
+        /// Instantiates a new Liquify component for LSU liquidity provision.
+        /// 
+        /// This method creates a new instance of the Liquify component which facilitates instant unstaking of Radix
+        /// network LSUs by matching unstakers with liquidity providers. The component starts in a disabled state
+        /// and must be enabled by the owner before accepting liquidity. It initializes all necessary data structures
+        /// including the AVL tree for order matching, key-value stores for tracking liquidity positions, and creates
+        /// the owner badge and liquidity receipt NFT resource. The component supports discounts from 0% to 5% in
+        /// increments of 0.025%.
+        /// 
+        /// # Arguments
+        /// * None
+        ///
+        /// # Returns
+        /// * A tuple containing:
+        ///   - `Global<Liquify>`: The instantiated Liquify component
+        ///   - `Bucket`: The owner badge bucket containing exactly 1 owner badge
         pub fn instantiate_liquify() -> (Global<Liquify>, Bucket) {
 
             let (address_reservation, component_address) =
@@ -301,14 +317,26 @@ mod liquify_module {
             (liquify_component, liquify_owner_badge)
         }
 
-        pub fn add_liquidity(
-            &mut self, 
-            xrd_bucket: Bucket, 
-            discount: Decimal, 
-            auto_unstake: bool,
-            auto_refill: bool,
-            refill_threshold: Decimal
-        ) -> NonFungibleBucket {
+        /// Allows user to deposit XRD liquidity with specified parameters.
+        /// 
+        /// This method takes a bucket of XRD, a discount of type Decimal that indicates the percentage amount under
+        /// the redemption value of an amount of LSUs that a liquidity provider is willing to purchase any LSU, and
+        /// a boolean that indicates whether the user wants to automatically unstake any LSUs that are collected. This
+        /// method is constrained by the `minimum_liquidity` variable. The user must pass in an amount of XRD that is greater
+        /// than or equal to the `minimum_liquidity` which is set to 10,000 XRD by default. This can be adjusted by the owner
+        /// of the component in order to maintain an efficient unstaking process. The higher the minimum, the more liquidity
+        /// can be processed in a single transaction. Auto refill can only be enabled when auto unstake is also enabled.
+        /// 
+        /// # Arguments
+        /// * `xrd_bucket`: A `Bucket` containing XRD to be deposited as liquidity
+        /// * `discount`: A `Decimal` representing the discount percentage the user is willing to use liquidity provided
+        /// * `auto_unstake`: A `bool` indicating whether the user wants to automatically unstake any LSUs that are collected
+        /// * `auto_refill`: A `bool` indicating whether the user wants to automatically refill liquidity from collected fills
+        /// * `refill_threshold`: A `Decimal` representing the minimum XRD amount needed to trigger auto refill
+        ///
+        /// # Returns
+        /// * A `NonFungibleBucket` containing the new liquidity receipt NFT that has been minted to track the liquidity
+        pub fn add_liquidity(&mut self, xrd_bucket: Bucket, discount: Decimal, auto_unstake: bool, auto_refill: bool, refill_threshold: Decimal) -> NonFungibleBucket {
             
             assert!(self.component_status == true, "Liquify is not accepting new liquidity at this time.");
             assert!(xrd_bucket.resource_address() == XRD, "Bucket must contain XRD");
@@ -381,6 +409,20 @@ mod liquify_module {
             new_liquidity_receipt
         }
 
+        /// Increases existing liquidity position with additional XRD.
+        /// 
+        /// This method allows users to add more XRD to an existing liquidity position identified by a liquidity
+        /// receipt NFT. The additional XRD is added to the available liquidity balance and the position is moved
+        /// to the back of the queue for its discount level by updating its epoch. This ensures fair ordering
+        /// where newly increased positions go behind existing positions at the same discount level. The method
+        /// enforces the same minimum liquidity requirement as add_liquidity.
+        /// 
+        /// # Arguments
+        /// * `receipt_bucket`: A `Bucket` containing exactly one liquidity receipt NFT
+        /// * `xrd_bucket`: A `Bucket` containing XRD to be added to the existing position
+        ///
+        /// # Returns
+        /// * A `Bucket` containing the same liquidity receipt NFT that was passed in
         pub fn increase_liquidity(&mut self, receipt_bucket: Bucket, xrd_bucket: Bucket) -> Bucket {
             assert!(receipt_bucket.resource_address() == self.liquidity_receipt.address(), "Bucket must contain Liquify liquidity receipt");
             assert!(receipt_bucket.amount() == dec!(1), "Must provide exactly one liquidity receipt");
@@ -436,12 +478,22 @@ mod liquify_module {
             receipt_bucket
         }
 
-        pub fn update_automation(
-            &mut self, 
-            receipt_bucket: Bucket, 
-            auto_refill: bool, 
-            refill_threshold: Decimal
-        ) -> Bucket {
+        /// Updates automation settings for an existing liquidity position.
+        /// 
+        /// This method allows liquidity providers to enable or disable automation features on their receipt.
+        /// Auto refill can only be enabled on receipts that have auto unstake enabled. When auto refill is
+        /// enabled, the position is tracked in the automated liquidity index. When disabled, it is removed
+        /// from tracking. The refill threshold determines the minimum XRD amount from collected fills needed
+        /// to trigger an automatic liquidity refill cycle.
+        /// 
+        /// # Arguments
+        /// * `receipt_bucket`: A `Bucket` containing exactly one liquidity receipt NFT
+        /// * `auto_refill`: A `bool` indicating whether to enable automatic liquidity refilling
+        /// * `refill_threshold`: A `Decimal` representing the minimum XRD amount to trigger refill (minimum 10,000)
+        ///
+        /// # Returns
+        /// * A `Bucket` containing the same liquidity receipt NFT with updated automation settings
+        pub fn update_automation(&mut self, receipt_bucket: Bucket, auto_refill: bool, refill_threshold: Decimal) -> Bucket {
             assert!(receipt_bucket.resource_address() == self.liquidity_receipt.address(), "Bucket must contain Liquify liquidity receipt");
             assert!(receipt_bucket.amount() == dec!(1), "Must provide exactly one liquidity receipt");
             
@@ -500,6 +552,19 @@ mod liquify_module {
             receipt_bucket
         }
 
+        /// Cycles liquidity by claiming fills and re-adding as liquidity.
+        /// 
+        /// This method allows automated systems or users to cycle a liquidity position by claiming all available
+        /// XRD from unstake NFT fills and automatically re-adding it as liquidity. Only works for receipts with
+        /// both auto_unstake and auto_refill enabled. The position must have enough claimable XRD to meet the
+        /// refill threshold. An automation fee is deducted and returned to the caller as payment for executing
+        /// the cycle. The remaining XRD is added back to the position's available liquidity.
+        /// 
+        /// # Arguments
+        /// * `receipt_id`: The `NonFungibleLocalId` of the liquidity receipt to cycle
+        ///
+        /// # Returns
+        /// * A `Bucket` containing the automation fee amount in XRD as payment to the caller
         pub fn cycle_liquidity(&mut self, receipt_id: NonFungibleLocalId) -> Bucket {
             let nft_data: LiquidityReceipt = self.liquidity_receipt.get_non_fungible_data(&receipt_id);
             let global_id = NonFungibleGlobalId::new(self.liquidity_receipt.address(), receipt_id.clone());
@@ -564,7 +629,7 @@ mod liquify_module {
             // Take automation fee
             let fee_amount = self.automation_fee;
             let automation_fee_bucket = total_xrd.take(fee_amount);
-            self.fee_vault.put(automation_fee_bucket);
+            // Don't put it in fee_vault - we'll return it to the caller
             
             // Find and remove from current position in AVL tree
             let mut key_to_remove = None;
@@ -603,15 +668,40 @@ mod liquify_module {
             self.xrd_liquidity.put(total_xrd);
             self.total_xrd_locked += xrd_to_add;
             
-            // Return empty bucket as confirmation
-            Bucket::new(XRD)
+            // Return the automation fee to the caller
+            automation_fee_bucket
         }
 
+        /// Gets the claimable XRD amount for a liquidity position.
+        /// 
+        /// This method calculates how much XRD can be claimed from unstake NFTs that have passed their
+        /// unbonding period. It only counts NFTs where the claim epoch has been reached - LSU fills are
+        /// not counted as they need to be collected first. This is useful for checking if a position
+        /// meets the refill threshold for automation or for users to see their claimable amounts.
+        /// 
+        /// # Arguments
+        /// * `receipt_id`: The `NonFungibleLocalId` of the liquidity receipt to check
+        ///
+        /// # Returns
+        /// * A `Decimal` representing the total XRD amount claimable from matured unstake NFTs
         pub fn get_claimable_xrd(&self, receipt_id: NonFungibleLocalId) -> Decimal {
             self.calculate_claimable_xrd(&receipt_id)
         }
 
-        pub fn get_buy_list_range(&self, start_index: u64, count: u64) -> Vec<(u128, NonFungibleGlobalId)> {
+        /// Gets a range of entries from the buy list order book.
+        /// 
+        /// This method returns a paginated view of the AVL tree buy list, useful for off-chain indexing
+        /// or frontend displays. The buy list is ordered by discount (best first), then by epoch (oldest
+        /// first), then by liquidity ID. This allows external systems to reconstruct the order matching
+        /// priority without needing to query the entire tree at once.
+        /// 
+        /// # Arguments
+        /// * `start_index`: The `u64` index to start from in the iteration
+        /// * `count`: The `u64` maximum number of entries to return
+        ///
+        /// # Returns
+        /// * A `Vec<(u128, NonFungibleGlobalId)>` containing tuples of AVL tree keys and receipt global IDs
+        pub fn get_buy_list_range(&self, start_index: u64, count: u64) -> Vec<(u128, NonFungibleGlobalId)>{
             let mut results = Vec::new();
             let mut current_index = 0u64;
             
@@ -637,6 +727,19 @@ mod liquify_module {
             results
         }
 
+        /// Gets a range of liquidity data entries.
+        /// 
+        /// This method returns paginated liquidity position data by iterating through sequential receipt IDs
+        /// starting from the given index. Useful for indexers or dashboards that need to display all active
+        /// liquidity positions with their current state including available/filled amounts and pending fills.
+        /// Note that receipt IDs start at 1, so start_index 0 will begin with receipt ID 1.
+        /// 
+        /// # Arguments
+        /// * `start_index`: The `u64` starting position (0-based, maps to receipt ID start_index + 1)
+        /// * `count`: The `u64` maximum number of entries to return
+        ///
+        /// # Returns
+        /// * A `Vec<(NonFungibleGlobalId, LiquidityData)>` containing receipt IDs and their associated data
         pub fn get_liquidity_data_range(&self, start_index: u64, count: u64) -> Vec<(NonFungibleGlobalId, LiquidityData)> {
             let mut results = Vec::new();
             
@@ -658,6 +761,19 @@ mod liquify_module {
             results
         }
 
+        /// Gets a range of automated liquidity positions.
+        /// 
+        /// This method returns paginated entries from the automated liquidity tracking index. Only positions
+        /// with auto_refill enabled are included. The index maintains insertion order and handles gaps when
+        /// positions disable automation. Useful for automation bots to identify which positions need cycling
+        /// based on their refill thresholds and claimable amounts.
+        /// 
+        /// # Arguments
+        /// * `start_index`: The `u64` index to start from (minimum 1)
+        /// * `count`: The `u64` maximum number of entries to return
+        ///
+        /// # Returns
+        /// * A `Vec<(u64, NonFungibleGlobalId)>` containing index positions and receipt global IDs
         pub fn get_automated_liquidity_range(&self, start_index: u64, count: u64) -> Vec<(u64, NonFungibleGlobalId)> {
             let mut results = Vec::new();
             
@@ -674,6 +790,18 @@ mod liquify_module {
             results
         }
 
+        /// Gets the current liquidity data for a specific receipt.
+        /// 
+        /// This method returns the mutable liquidity data stored in the key-value store for a given
+        /// receipt ID. This includes the current available liquidity, amount already filled, number
+        /// of fills pending collection, and the epoch when liquidity was last added. Useful for
+        /// frontends to display position details or for users to check their liquidity status.
+        /// 
+        /// # Arguments
+        /// * `receipt_id`: The `NonFungibleLocalId` of the liquidity receipt to query
+        ///
+        /// # Returns
+        /// * A `LiquidityData` struct containing the current state of the liquidity position
         pub fn get_liquidity_data(&self, receipt_id: NonFungibleLocalId) -> LiquidityData {
             let global_id = NonFungibleGlobalId::new(self.liquidity_receipt.address(), receipt_id);
             self.liquidity_data.get(&global_id).unwrap().clone()
@@ -722,6 +850,21 @@ mod liquify_module {
             total_claimable
         }
 
+        /// Removes liquidity and returns XRD to the provider.
+        /// 
+        /// This method allows liquidity providers to withdraw their available XRD liquidity. Only XRD that
+        /// hasn't been used to fill orders can be withdrawn - any fills must be collected separately.
+        /// If the position has auto_refill enabled, it will be disabled and removed from automation tracking.
+        /// The position is removed from the buy list order book and the liquidity index is updated. Multiple
+        /// receipts can be processed in a single transaction.
+        /// 
+        /// # Arguments
+        /// * `liquidity_receipt_bucket`: A `Bucket` containing one or more liquidity receipt NFTs
+        ///
+        /// # Returns
+        /// * A tuple containing:
+        ///   - `Bucket`: The withdrawn XRD from all provided receipts
+        ///   - `Bucket`: The liquidity receipt NFTs (returned unchanged)
         pub fn remove_liquidity(&mut self, liquidity_receipt_bucket: Bucket) -> (Bucket, Bucket) {
             assert!(liquidity_receipt_bucket.resource_address() == self.liquidity_receipt.address(), "Bucket must contain Liquify liquidity receipt(s)");
 
@@ -802,6 +945,22 @@ mod liquify_module {
             (user_funds, liquidity_receipt_bucket)
         }
 
+        /// Processes LSU unstaking using on-ledger order matching.
+        /// 
+        /// This method takes LSUs and matches them against available liquidity positions in discount order.
+        /// The matching algorithm iterates through the buy list up to max_iterations times, filling orders
+        /// at progressively worse discounts until all LSUs are processed or no more liquidity is available.
+        /// Filled orders result in either LSUs (if auto_unstake is false) or unstake NFTs (if auto_unstake
+        /// is true) being stored for later collection by liquidity providers.
+        /// 
+        /// # Arguments
+        /// * `lsu_bucket`: A `FungibleBucket` containing native Radix validator LSUs
+        /// * `max_iterations`: A `u8` limiting the number of liquidity positions to check
+        ///
+        /// # Returns
+        /// * A tuple containing:
+        ///   - `Bucket`: XRD received from the liquidity providers (minus platform fee)
+        ///   - `FungibleBucket`: Any remaining LSUs that couldn't be matched
         pub fn liquify_unstake(&mut self, lsu_bucket: FungibleBucket, max_iterations: u8) -> (Bucket, FungibleBucket) {
             assert!(self.validate_lsu(lsu_bucket.resource_address()), "Bucket must contain a native Radix Validator LSU");
 
@@ -822,6 +981,21 @@ mod liquify_module {
             self.process_unstake(lsu_bucket, order_keys)
         }
 
+        /// Processes LSU unstaking using off-ledger computed order keys.
+        /// 
+        /// This method enables more efficient order matching by allowing order keys to be computed off-ledger
+        /// and passed in directly. This avoids the iteration limits of the on-ledger method and enables
+        /// sophisticated matching algorithms to run off-chain. The order keys must correspond to valid
+        /// positions in the buy list AVL tree. Invalid keys are skipped without causing transaction failure.
+        /// 
+        /// # Arguments
+        /// * `lsu_bucket`: A `FungibleBucket` containing native Radix validator LSUs
+        /// * `order_keys`: A `Vec<u128>` of pre-computed AVL tree keys to match against
+        ///
+        /// # Returns
+        /// * A tuple containing:
+        ///   - `Bucket`: XRD received from the liquidity providers (minus platform fee)
+        ///   - `FungibleBucket`: Any remaining LSUs that couldn't be matched
         pub fn liquify_unstake_off_ledger(&mut self, lsu_bucket: FungibleBucket, order_keys: Vec<u128>) -> (Bucket, FungibleBucket) {
             assert!(self.validate_lsu(lsu_bucket.resource_address()), "Bucket must contain a native Radix Validator LSU");
             self.process_unstake(lsu_bucket, order_keys)
@@ -987,6 +1161,22 @@ mod liquify_module {
             (xrd_bucket, lsu_bucket)
         }
         
+        /// Collects fills for liquidity providers.
+        /// 
+        /// This method allows liquidity providers to collect LSUs or unstake NFTs from orders they've filled.
+        /// The number of fills to collect can be limited to manage transaction costs. Fills are returned in
+        /// the order they were created. For positions with auto_unstake enabled, unstake NFTs are returned.
+        /// For positions without auto_unstake, the original LSUs are returned. Multiple receipts can be
+        /// processed in one transaction.
+        /// 
+        /// # Arguments
+        /// * `liquidity_receipt_bucket`: A `Bucket` containing one or more liquidity receipt NFTs
+        /// * `number_of_fills_to_collect`: A `u64` limiting total fills collected across all receipts
+        ///
+        /// # Returns
+        /// * A tuple containing:
+        ///   - `Vec<Bucket>`: A vector of buckets containing collected LSUs or unstake NFTs
+        ///   - `Bucket`: The liquidity receipt NFTs (returned unchanged)
         pub fn collect_fills(&mut self, liquidity_receipt_bucket: Bucket, number_of_fills_to_collect: u64) -> (Vec<Bucket>, Bucket) {
             
             assert!(
@@ -1072,27 +1262,98 @@ mod liquify_module {
             (bucket_vec, liquidity_receipt_bucket)
         }
         
+        /// Collects accumulated platform fees.
+        /// 
+        /// This method allows the component owner to withdraw all platform fees that have been collected
+        /// from unstaking operations. Platform fees are charged as a percentage of XRD volume processed.
+        /// Only the holder of the owner badge can call this method. The fee vault is completely emptied.
+        /// 
+        /// # Arguments
+        /// * None
+        ///
+        /// # Returns
+        /// * A `Bucket` containing all accumulated platform fees in XRD
         pub fn collect_platform_fees(&mut self) -> Bucket {
             self.fee_vault.take_all()
         }
         
+        /// Sets the operational status of the component.
+        /// 
+        /// This method allows the owner to enable or disable the component's ability to accept new liquidity.
+        /// When disabled, add_liquidity will reject new deposits but all other operations continue to function
+        /// normally. This provides a mechanism for maintenance or emergency situations without disrupting
+        /// existing positions. Only the holder of the owner badge can call this method.
+        /// 
+        /// # Arguments
+        /// * `status`: A `bool` where true enables the component and false disables it
+        ///
+        /// # Returns
+        /// * None
         pub fn set_component_status(&mut self, status: bool) {
             self.component_status = status;
         }
 
+        /// Sets the platform fee percentage.
+        /// 
+        /// This method allows the owner to adjust the platform fee charged on unstaking operations. The fee
+        /// is taken from the XRD amount paid to unstakers before they receive their funds. Fee changes only
+        /// affect future unstaking operations, not existing fills. Only the holder of the owner badge can
+        /// call this method.
+        /// 
+        /// # Arguments
+        /// * `fee`: A `Decimal` representing the platform fee as a percentage (e.g., 0.01 for 1%)
+        ///
+        /// # Returns
+        /// * None
         pub fn set_platform_fee(&mut self, fee: Decimal) {
             self.platform_fee = fee;
         }
 
+        /// Sets the automation fee amount.
+        /// 
+        /// This method allows the owner to adjust the fee paid to callers who execute cycle_liquidity for
+        /// automated positions. The fee incentivizes external actors to monitor and cycle positions when
+        /// they reach their refill thresholds. The fee is paid from the claimed XRD before re-adding
+        /// liquidity. Only the holder of the owner badge can call this method.
+        /// 
+        /// # Arguments
+        /// * `new_fee`: A `Decimal` representing the fixed XRD amount paid per cycle operation
+        ///
+        /// # Returns
+        /// * None
         pub fn set_automation_fee(&mut self, new_fee: Decimal) {
             assert!(new_fee >= dec!(0), "Automation fee cannot be negative");
             self.automation_fee = new_fee;
         }
 
+        /// Sets the minimum liquidity requirement.
+        /// 
+        /// This method allows the owner to adjust the minimum XRD amount required for add_liquidity and
+        /// increase_liquidity operations. Higher minimums improve transaction efficiency by ensuring
+        /// positions can fill meaningful order sizes, but may exclude smaller liquidity providers.
+        /// Only the holder of the owner badge can call this method.
+        /// 
+        /// # Arguments
+        /// * `min`: A `Decimal` representing the minimum XRD amount required for liquidity operations
+        ///
+        /// # Returns
+        /// * None
         pub fn set_minimum_liquidity(&mut self, min: Decimal) {
             self.minimum_liquidity = min;
         }
 
+        /// Sets the receipt NFT image URL.
+        /// 
+        /// This method allows the owner to update the image URL used for newly minted liquidity receipt
+        /// NFTs. Existing NFTs are not affected as the URL is stored as immutable data at mint time.
+        /// This allows for branding updates or fixing broken image links. Only the holder of the owner
+        /// badge can call this method.
+        /// 
+        /// # Arguments
+        /// * `url`: A `String` containing the new image URL for liquidity receipt NFTs
+        ///
+        /// # Returns
+        /// * None
         pub fn set_receipt_image_url(&mut self, url: String) {
             self.receipt_image_url = Url::of(url);
         }
