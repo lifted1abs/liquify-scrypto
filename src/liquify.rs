@@ -3,6 +3,14 @@
 use scrypto::prelude::*;
 use scrypto_avltree::AvlTree;
 
+
+#[derive(ScryptoSbor, NonFungibleData, Debug)]
+pub struct UnstakeData {
+    pub name: String,
+    pub claim_epoch: Epoch,
+    pub claim_amount: Decimal,
+}
+
 // NFT - Data that doesn't change during fills
 #[derive(NonFungibleData, ScryptoSbor, PartialEq, Debug, Clone)]
 pub struct LiquidityReceipt {
@@ -632,7 +640,8 @@ mod liquify_module {
                     UnstakeNFTOrLSU::UnstakeNFT(unstake_nft_data) => {
                         // Process unstake NFT - claim the XRD
                         let unstake_nft_vault = self.component_vaults.get(&unstake_nft_data.resource_address).unwrap();
-                        let unstake_nft = unstake_nft_vault.as_non_fungible().take_non_fungible(&unstake_nft_data.id);
+                        let local_id: NonFungibleLocalId = unstake_nft_data.id;
+                        let unstake_nft = unstake_nft_vault.as_non_fungible().take_non_fungible(&local_id);
                         
                         // Get validator and claim
                         let validator_address = self.get_validator_from_unstake_nft(&unstake_nft_data.resource_address);
@@ -725,32 +734,53 @@ mod liquify_module {
                 
                 match unstake_nft_or_lsu {
                     UnstakeNFTOrLSU::UnstakeNFT(unstake_nft_data) => {
-                        let nft_manager = ResourceManager::from(unstake_nft_data.resource_address);
-                        
-                        // Get claim_amount and claim_epoch from metadata
-                        let claim_amount: Decimal = nft_manager
-                            .get_metadata("claim_amount")
-                            .unwrap()
-                            .unwrap_or_else(|| Runtime::panic(String::from("Invalid stake claim NFT - no claim_amount")));
-                        
-                        let claim_epoch: u64 = nft_manager
-                            .get_metadata("claim_epoch")
-                            .unwrap()
-                            .unwrap_or_else(|| Runtime::panic(String::from("Invalid stake claim NFT - no claim_epoch")));
+                        let nft_data: UnstakeData = NonFungibleResourceManager::from(unstake_nft_data.resource_address)
+                            .get_non_fungible_data(&unstake_nft_data.id);
                         
                         // Check if past the unbonding period
-                        let current_epoch = Runtime::current_epoch().number();
-                        if current_epoch >= claim_epoch {
-                            total_claimable += claim_amount;
+                        let current_epoch = Runtime::current_epoch();
+                        if current_epoch >= nft_data.claim_epoch {
+                            total_claimable += nft_data.claim_amount;
                         }
                     }
                     UnstakeNFTOrLSU::LSU(_) => {
                         // LSUs are NOT claimable for XRD - they need to be collected first
-                        // They contribute 0 to claimable XRD
                     }
                 }
                 
                 fills_checked += 1;
+            }
+            
+            total_claimable
+        }
+
+        fn calculate_claimable_xrd(&self, receipt_id: &NonFungibleLocalId) -> Decimal {
+            let receipt_id_u64 = match receipt_id {
+                NonFungibleLocalId::Integer(i) => i.value(),
+                _ => return dec!(0)
+            };
+            
+            let start_key = CombinedKey::new(receipt_id_u64, 1, 0).key;
+            let end_key = CombinedKey::new(receipt_id_u64, u32::MAX, 0).key;
+            
+            let mut total_claimable = dec!(0);
+            
+            for (_, unstake_nft_or_lsu, _) in self.order_fill_tree.range(start_key..=end_key) {
+                match unstake_nft_or_lsu {
+                    UnstakeNFTOrLSU::UnstakeNFT(unstake_nft_data) => {
+                        let nft_data: UnstakeData = NonFungibleResourceManager::from(unstake_nft_data.resource_address)
+                            .get_non_fungible_data(&unstake_nft_data.id);
+                        
+                        // Check if past the unbonding period
+                        let current_epoch = Runtime::current_epoch();
+                        if current_epoch >= nft_data.claim_epoch {
+                            total_claimable += nft_data.claim_amount;
+                        }
+                    }
+                    UnstakeNFTOrLSU::LSU(_) => {
+                        // LSUs are NOT claimable for XRD - they need to be collected first
+                    }
+                }
             }
             
             total_claimable
@@ -768,6 +798,7 @@ mod liquify_module {
         ///
         /// # Returns
         /// * A `Decimal` representing the total XRD amount claimable from matured unstake NFTs
+
         pub fn get_claimable_xrd(&self, receipt_id: NonFungibleLocalId) -> Decimal {
             self.calculate_claimable_xrd(&receipt_id)
         }
@@ -889,49 +920,6 @@ mod liquify_module {
         pub fn get_liquidity_data(&self, receipt_id: NonFungibleLocalId) -> LiquidityData {
             let global_id = NonFungibleGlobalId::new(self.liquidity_receipt.address(), receipt_id);
             self.liquidity_data.get(&global_id).unwrap().clone()
-        }
-
-        fn calculate_claimable_xrd(&self, receipt_id: &NonFungibleLocalId) -> Decimal {
-            let receipt_id_u64 = match receipt_id {
-                NonFungibleLocalId::Integer(i) => i.value(),
-                _ => return dec!(0)
-            };
-            
-            let start_key = CombinedKey::new(receipt_id_u64, 1, 0).key;
-            let end_key = CombinedKey::new(receipt_id_u64, u32::MAX, 0).key;
-            
-            let mut total_claimable = dec!(0);
-            
-            for (_, unstake_nft_or_lsu, _) in self.order_fill_tree.range(start_key..=end_key) {
-                match unstake_nft_or_lsu {
-                    UnstakeNFTOrLSU::UnstakeNFT(unstake_nft_data) => {
-                        let nft_manager = ResourceManager::from(unstake_nft_data.resource_address);
-                        
-                        // Get claim_amount and claim_epoch from metadata
-                        let claim_amount: Decimal = nft_manager
-                            .get_metadata("claim_amount")
-                            .unwrap()
-                            .unwrap_or_else(|| Runtime::panic(String::from("Invalid stake claim NFT - no claim_amount")));
-                        
-                        let claim_epoch: u64 = nft_manager
-                            .get_metadata("claim_epoch")
-                            .unwrap()
-                            .unwrap_or_else(|| Runtime::panic(String::from("Invalid stake claim NFT - no claim_epoch")));
-                        
-                        // Check if past the unbonding period
-                        let current_epoch = Runtime::current_epoch().number();
-                        if current_epoch >= claim_epoch {
-                            total_claimable += claim_amount;
-                        }
-                    }
-                    UnstakeNFTOrLSU::LSU(_) => {
-                        // LSUs are NOT claimable for XRD - they need to be collected first
-                        // They contribute 0 to claimable XRD
-                    }
-                }
-            }
-            
-            total_claimable
         }
 
         /// Removes liquidity and returns XRD to the provider.

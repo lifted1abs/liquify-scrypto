@@ -197,139 +197,183 @@ impl TestEnvironment {
 }
 
 #[test]
-fn test_scalability() {
+fn test_add_liquidity_scaling() {
     let mut ledger = TestEnvironment::instantiate_test();
     let user_account1 = ledger.user_account1.account_address;
     let user_account4 = ledger.user_account4.account_address;
-    let user_account5 = ledger.user_account5.account_address;
-    let user_account6 = ledger.user_account6.account_address;
     let liquify_component = ledger.liquify_component;
-    let lsu_resource_address = ledger.lsu_resource_address;
 
-    println!("=== SCALABILITY TEST ===");
-    println!("Testing transaction costs with varying AVL tree sizes\n");
+    // PARAMETER - Change this value to test different tree sizes
+    let TREE_SIZE: usize = 100; // Try: 0, 10, 50, 100, 500, 1000
 
-    // Test scenarios with different tree sizes
-    let test_sizes = vec![0, 100, 500, 1000];
-    let mut current_tree_size = 0;
+    println!("\n=== ADD LIQUIDITY SCALING TEST ===");
+    println!("Building AVL tree with {} positions...", TREE_SIZE);
 
-    for target_size in test_sizes {
-        println!("\n--- Testing with {} existing positions ---", target_size);
-        
-        // Populate the AVL tree to target size
-        let positions_to_add = target_size - current_tree_size;
-        
-        if positions_to_add > 0 {
-            println!("Adding {} positions to reach target size...", positions_to_add);
-            
-            let accounts = vec![
-                (user_account4, ledger.user_account4.clone()),
-                (user_account5, ledger.user_account5.clone()),
-                (user_account6, ledger.user_account6.clone()),
-            ];
-            
-            for i in 0..positions_to_add {
-                let account_index = i % accounts.len();
-                let (account_address, account) = &accounts[account_index];
-                
-                if i % 100 == 0 && i > 0 {
-                    ledger.ledger.load_account_from_faucet(*account_address);
-                }
-                
-                let discount = match i % 5 {
-                    0 => dec!("0.001"),
-                    1 => dec!("0.005"),
-                    2 => dec!("0.010"),
-                    3 => dec!("0.015"),
-                    _ => dec!("0.020"),
-                };
-                
-                let manifest = ManifestBuilder::new()
-                    .lock_fee_from_faucet()
-                    .withdraw_from_account(*account_address, XRD, dec!(1))
-                    .take_all_from_worktop(XRD, "xrd")
-                    .call_method_with_name_lookup(liquify_component, "add_liquidity", |lookup| {(
-                        lookup.bucket("xrd"),
-                        discount,
-                        false,
-                        false,
-                        dec!("0"),
-                    )})
-                    .call_method(
-                        *account_address,
-                        "deposit_batch",
-                        manifest_args!(ManifestExpression::EntireWorktop),
-                    )
-                    .build();
-                
-                let receipt = ledger.execute_manifest(manifest, account.clone());
-                
-                if !receipt.is_commit_success() {
-                    println!("Failed to add position {}", i);
-                    break;
-                }
-            }
-            current_tree_size = target_size;
+    // Populate the AVL tree
+    for i in 0..TREE_SIZE {
+        if i % 50 == 0 && i > 0 {
+            ledger.ledger.load_account_from_faucet(user_account4);
         }
-        
-        // Test add_liquidity with current tree size
-        println!("\nTesting add_liquidity with {} positions in tree...", current_tree_size);
+
+        let discount = match i % 5 {
+            0 => dec!("0.001"),
+            1 => dec!("0.005"),
+            2 => dec!("0.010"),
+            3 => dec!("0.015"),
+            _ => dec!("0.020"),
+        };
+
         let manifest = ManifestBuilder::new()
             .lock_fee_from_faucet()
-            .withdraw_from_account(user_account1, XRD, dec!(10))
+            .withdraw_from_account(user_account4, XRD, dec!(1))
             .take_all_from_worktop(XRD, "xrd")
             .call_method_with_name_lookup(liquify_component, "add_liquidity", |lookup| {(
                 lookup.bucket("xrd"),
-                dec!("0.01"),
+                discount,
                 false,
                 false,
                 dec!("0"),
             )})
             .call_method(
-                user_account1,
+                user_account4,
                 "deposit_batch",
                 manifest_args!(ManifestExpression::EntireWorktop),
             )
             .build();
+
+        let receipt = ledger.execute_manifest(
+            manifest,
+            ledger.user_account4.clone(),
+        );
         
-        let receipt = ledger.execute_manifest(manifest, ledger.user_account1.clone());
-        
-        // Print receipt to see transaction cost
-        println!("Add liquidity transaction:");
-        println!("{:?}", receipt);
-        
-        // Test unstaking
-        println!("\nTesting unstake with {} positions in tree...", current_tree_size);
+        if !receipt.is_commit_success() {
+            println!("Failed to add position {}", i);
+            break;
+        }
+    }
+
+    println!("✓ Tree populated with {} positions\n", TREE_SIZE);
+
+    // Test add liquidity with full tree
+    println!("=== TESTING ADD_LIQUIDITY WITH {} POSITIONS ===", TREE_SIZE);
+    
+    let manifest = ManifestBuilder::new()
+        .lock_fee_from_faucet()
+        .withdraw_from_account(user_account1, XRD, dec!(10))
+        .take_all_from_worktop(XRD, "xrd")
+        .call_method_with_name_lookup(liquify_component, "add_liquidity", |lookup| {(
+            lookup.bucket("xrd"),
+            dec!("0.01"),    // 1% discount
+            false,
+            false,
+            dec!("0"),
+        )})
+        .call_method(
+            user_account1,
+            "deposit_batch",
+            manifest_args!(ManifestExpression::EntireWorktop),
+        )
+        .build();
+    
+    let receipt = ledger.execute_manifest(manifest, ledger.user_account1.clone());
+    
+    println!("\n=== RESULT ===");
+    println!("Tree size: {} positions", TREE_SIZE);
+    println!("Transaction: {}", if receipt.is_commit_success() { "SUCCESS" } else { "FAILED" });
+    println!("\nLook for 'Transaction Cost:' in the output above");
+    println!("\nTo test scaling, run with different TREE_SIZE values:");
+    println!("0, 10, 50, 100, 500, 1000");
+}
+
+#[test]
+fn test_unstake_scaling() {
+    let mut ledger = TestEnvironment::instantiate_test();
+    let user_account1 = ledger.user_account1.account_address;
+    let user_account4 = ledger.user_account4.account_address;
+    let liquify_component = ledger.liquify_component;
+    let lsu_resource_address = ledger.lsu_resource_address;
+
+    // PARAMETER - Change this value to test different tree sizes
+    let TREE_SIZE: usize = 100; // Try: 0, 10, 50, 100, 500, 1000
+
+    println!("\n=== UNSTAKE SCALING TEST ===");
+    println!("Building AVL tree with {} positions...", TREE_SIZE);
+
+    // Populate the AVL tree
+    for i in 0..TREE_SIZE {
+        if i % 50 == 0 && i > 0 {
+            ledger.ledger.load_account_from_faucet(user_account4);
+        }
+
+        let discount = match i % 5 {
+            0 => dec!("0.001"),
+            1 => dec!("0.005"),
+            2 => dec!("0.010"),
+            3 => dec!("0.015"),
+            _ => dec!("0.020"),
+        };
+
         let manifest = ManifestBuilder::new()
             .lock_fee_from_faucet()
-            .withdraw_from_account(
-                user_account1, 
-                lsu_resource_address, 
-                dec!(10)
-            )
-            .take_all_from_worktop(lsu_resource_address, "lsu")
-            .call_method_with_name_lookup(liquify_component, "liquify_unstake", |lookup| {
-                (lookup.bucket("lsu"),
-                5u8
-            )
-            })
+            .withdraw_from_account(user_account4, XRD, dec!(1))
+            .take_all_from_worktop(XRD, "xrd")
+            .call_method_with_name_lookup(liquify_component, "add_liquidity", |lookup| {(
+                lookup.bucket("xrd"),
+                discount,
+                false,
+                false,
+                dec!("0"),
+            )})
             .call_method(
-                user_account1,
+                user_account4,
                 "deposit_batch",
                 manifest_args!(ManifestExpression::EntireWorktop),
             )
             .build();
+
+        let receipt = ledger.execute_manifest(
+            manifest,
+            ledger.user_account4.clone(),
+        );
         
-        let unstake_receipt = ledger.execute_manifest(manifest, ledger.user_account1.clone());
-        
-        println!("Unstake transaction:");
-        println!("{:?}", unstake_receipt);
+        if !receipt.is_commit_success() {
+            println!("Failed to add position {}", i);
+            break;
+        }
     }
+
+    println!("✓ Tree populated with {} positions\n", TREE_SIZE);
+
+    // Test unstaking with full tree
+    println!("=== TESTING LIQUIFY_UNSTAKE WITH {} POSITIONS ===", TREE_SIZE);
     
-    println!("\n=== ANALYSIS ===");
-    println!("Check the transaction costs above to see how they scale with tree size.");
-    println!("If costs increase linearly with tree size, that indicates O(n) complexity.");
-    println!("If costs increase logarithmically, that indicates O(log n) complexity (good!).");
+    let manifest = ManifestBuilder::new()
+        .lock_fee_from_faucet()
+        .withdraw_from_account(
+            user_account1, 
+            lsu_resource_address, 
+            dec!(10)
+        )
+        .take_all_from_worktop(lsu_resource_address, "lsu")
+        .call_method_with_name_lookup(liquify_component, "liquify_unstake", |lookup| {
+            (lookup.bucket("lsu"),
+            10u8  // max_iterations
+        )
+        })
+        .call_method(
+            user_account1,
+            "deposit_batch",
+            manifest_args!(ManifestExpression::EntireWorktop),
+        )
+        .build();
     
-    println!("\n✓ Scalability test completed!");
+    let receipt = ledger.execute_manifest(manifest, ledger.user_account1.clone());
+
+    println!("\n=== RESULT ===");
+    println!("Tree size: {} positions", TREE_SIZE);
+    println!("Max iterations: 10");
+    println!("Transaction: {}", if receipt.is_commit_success() { "SUCCESS" } else { "FAILED" });
+    println!("\nLook for 'Transaction Cost:' in the output above");
+    println!("\nTo test scaling, run with different TREE_SIZE values:");
+    println!("0, 10, 50, 100, 500, 1000");
 }
