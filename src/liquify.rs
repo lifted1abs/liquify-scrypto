@@ -151,6 +151,7 @@ mod liquify_module {
             get_buy_list_range => PUBLIC;
             get_liquidity_data_range => PUBLIC;
             get_automated_liquidity_range => PUBLIC;
+            set_minimum_refill_threshold => restrict_to: [owner];
         }
     }
 
@@ -172,6 +173,7 @@ mod liquify_module {
         platform_fee: Decimal,
         fee_vault: Vault,
         minimum_liquidity: Decimal,
+        minimum_refill_threshold: Decimal,
         receipt_image_url: Url,
         automation_fee: Decimal,
         automated_liquidity: KeyValueStore<u64, NonFungibleGlobalId>,
@@ -266,6 +268,7 @@ mod liquify_module {
                 platform_fee: dec!(0.00),
                 fee_vault: Vault::new(XRD),
                 minimum_liquidity: dec!(10000),
+                minimum_refill_threshold: dec!(10000),
                 receipt_image_url: Url::of("https://bafybeib7cokm27lwwkunaibn7hczijn3ztkypbzttmt7hymaov44s5e5sm.ipfs.w3s.link/liquify2.png"),
                 automation_fee: dec!(5),
                 automated_liquidity: KeyValueStore::new_with_registered_type(),
@@ -310,6 +313,7 @@ mod liquify_module {
                     get_buy_list_range => Free, updatable;
                     get_liquidity_data_range => Free, updatable;
                     get_automated_liquidity_range => Free, updatable;
+                    set_minimum_refill_threshold => Free, updatable;
                 }
             })
             .globalize();
@@ -1481,6 +1485,10 @@ mod liquify_module {
         /// * None
         pub fn set_minimum_liquidity(&mut self, min: Decimal) {
             self.minimum_liquidity = min;
+        }
+
+        pub fn set_minimum_refill_threshold(&mut self, min: Decimal) {
+            self.minimum_refill_threshold = min;
         }
 
         /// Sets the receipt NFT image URL.

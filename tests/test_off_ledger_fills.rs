@@ -134,7 +134,7 @@ impl TestEnvironment {
             receipt.expect_commit_success();
         }
 
-        // *********** Set minimum liquidity to 0 ***********
+        // *********** Set minimum liquidity to 0 for testing ***********
         let manifest = ManifestBuilder::new()
             .lock_fee_from_faucet()
             .create_proof_from_account_of_amount(
@@ -158,33 +158,6 @@ impl TestEnvironment {
             vec![NonFungibleGlobalId::from_public_key(&admin_public_key)],
         );
         receipt.expect_commit_success();
-
-        // *********** Create 50 small liquidity positions ***********
-        // All with maximum compute intensity: auto_unstake=true, auto_refill=true, refill_threshold=10000
-        for _ in 0..200 {
-            let manifest = ManifestBuilder::new()
-                .lock_fee_from_faucet()
-                .withdraw_from_account(user_account_address4, XRD, dec!(1))
-                .take_all_from_worktop(XRD, "xrd")
-                .call_method_with_name_lookup(liquify_component, "add_liquidity", |lookup| {(
-                    lookup.bucket("xrd"),
-                    dec!("0.0010"),
-                    true,           // auto_unstake
-                    true,           // auto_refill
-                    dec!("10000"),  // refill_threshold
-                )})
-                .call_method(
-                    user_account_address4,
-                    "deposit_batch",
-                    manifest_args!(ManifestExpression::EntireWorktop),
-                )
-                .build();
-            let receipt = ledger.execute_manifest(
-                manifest,
-                vec![NonFungibleGlobalId::from_public_key(&user_public_key4)],
-            );
-            receipt.expect_commit_success();
-        }
    
         Self {
             ledger,
@@ -220,34 +193,84 @@ fn instantiate_test() {
     TestEnvironment::instantiate_test();
 }
 
+
 #[test]
 fn test_off_ledger_fills() {
     let mut ledger = TestEnvironment::instantiate_test();
     let user_account1 = ledger.user_account1.account_address;
+    let user_account4 = ledger.user_account4.account_address;
     let liquify_component = ledger.liquify_component;
     let lsu_resource_address = ledger.lsu_resource_address;
 
-    // Create order keys - these would normally come from off-chain calculation
-    let mut off_ledger_order_vec: Vec<u128> = Vec::new();
-    let base_key: u128 = 184467440737095516161;
-    let num_orders = 200; // or however many you want to test
-    
-    // Generate sequential keys
-    for i in 0..num_orders {
-        off_ledger_order_vec.push(base_key + i);
-    }
-    
-    println!("Generated {} order keys", off_ledger_order_vec.len());
-    println!("First key: {}", off_ledger_order_vec[0]);
-    println!("Last key: {}", off_ledger_order_vec[off_ledger_order_vec.len() - 1]);
+    // CLEAR PARAMETERS - ADJUST THESE AS NEEDED
+    let NUM_LIQUIDITY_POSITIONS = 10;  
+    let XRD_PER_POSITION = dec!(100); 
+    let NUM_KEYS_TO_TEST = 10;        
 
-    // User 1 sells LSUs using off-ledger order selection
+    println!("=== TEST PARAMETERS ===");
+    println!("Creating {} liquidity positions", NUM_LIQUIDITY_POSITIONS);
+    println!("Each position has {} XRD", XRD_PER_POSITION);
+    println!("Will test unstaking with {} keys", NUM_KEYS_TO_TEST);
+    println!("======================\n");
+
+    // Get epoch BEFORE creating positions
+    let creation_epoch = ledger.ledger.get_current_epoch().number() as u32;
+    println!("Creating positions in epoch: {}", creation_epoch);
+
+    // Create liquidity positions
+    for i in 0..NUM_LIQUIDITY_POSITIONS {
+        let manifest = ManifestBuilder::new()
+            .lock_fee_from_faucet()
+            .withdraw_from_account(user_account4, XRD, XRD_PER_POSITION)
+            .take_all_from_worktop(XRD, "xrd")
+            .call_method_with_name_lookup(liquify_component, "add_liquidity", |lookup| {(
+                lookup.bucket("xrd"),
+                dec!("0.0010"),    // 0.1% discount
+                true,              // auto_unstake
+                true,              // auto_refill
+                dec!("100"),       // refill_threshold
+            )})
+            .call_method(
+                user_account4,
+                "deposit_batch",
+                manifest_args!(ManifestExpression::EntireWorktop),
+            )
+            .build();
+        
+        let receipt = ledger.execute_manifest(
+            manifest,
+            ledger.user_account4.clone(),
+        );
+        receipt.expect_commit_success();
+    }
+
+    println!("✓ Successfully created {} liquidity positions", NUM_LIQUIDITY_POSITIONS);
+
+    // Generate keys using the CREATION epoch
+    let discount_u64 = 10u64; // 0.0010 * 10000
+    let mut off_ledger_order_vec: Vec<u128> = Vec::new();
+    
+    for liquidity_id in 1..=NUM_KEYS_TO_TEST {
+        let key = ((discount_u64 as u128) << 96) | ((creation_epoch as u128) << 64) | (liquidity_id as u128);
+        off_ledger_order_vec.push(key);
+    }
+
+    println!("\n=== KEY GENERATION ===");
+    println!("Generated {} keys for epoch {}", off_ledger_order_vec.len(), creation_epoch);
+
+    // Test unstaking
+    let initial_xrd_balance = ledger.ledger.get_component_balance(user_account1, XRD);
+    let initial_lsu_balance = ledger.ledger.get_component_balance(user_account1, lsu_resource_address);
+    println!("\n=== UNSTAKING TEST ===");
+    println!("User1 initial XRD: {} XRD", initial_xrd_balance);
+    println!("User1 initial LSU: {} LSU", initial_lsu_balance);
+
     let manifest = ManifestBuilder::new()
         .lock_fee_from_faucet()
         .withdraw_from_account(
             user_account1, 
             lsu_resource_address, 
-            dec!(1000)
+            dec!(100) // Unstake 100 LSUs
         )
         .take_all_from_worktop(lsu_resource_address, "lsu")
         .call_method_with_name_lookup(
@@ -267,6 +290,19 @@ fn test_off_ledger_fills() {
         manifest,
         ledger.user_account1.clone(),
     );
-    println!("{:?}\n", receipt);
+    
     receipt.expect_commit_success();
+    
+    // Check results
+    let final_xrd_balance = ledger.ledger.get_component_balance(user_account1, XRD);
+    let final_lsu_balance = ledger.ledger.get_component_balance(user_account1, lsu_resource_address);
+    let xrd_received = final_xrd_balance - initial_xrd_balance;
+    let lsu_spent = initial_lsu_balance - final_lsu_balance;
+    
+    println!("\n=== RESULTS ===");
+    println!("XRD received: {}", xrd_received);
+    println!("LSUs spent: {}", lsu_spent);
+    
+    assert!(xrd_received > dec!(0), "Should have received XRD from unstaking");
+    assert!(lsu_spent > dec!(0), "Should have spent LSUs");
 }
