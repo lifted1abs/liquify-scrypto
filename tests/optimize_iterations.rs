@@ -75,6 +75,31 @@ impl TestEnvironment {
         let owner_badge = receipt.expect_commit(true).new_resource_addresses()[0];
         let liquidity_receipt = receipt.expect_commit(true).new_resource_addresses()[1];
 
+        // *********** Enable the component (it starts disabled) ***********
+        let manifest = ManifestBuilder::new()
+            .lock_fee_from_faucet()
+            .create_proof_from_account_of_amount(
+                admin_account_address, 
+                owner_badge,
+                1,
+            )
+            .call_method(
+                liquify_component, 
+                "set_component_status", 
+                manifest_args!(true),
+            )
+            .call_method(
+                admin_account_address,
+                "deposit_batch",
+                manifest_args!(ManifestExpression::EntireWorktop),
+            )
+            .build();
+        let receipt = ledger.execute_manifest(
+            manifest,
+            vec![NonFungibleGlobalId::from_public_key(&admin_public_key)],
+        );
+        receipt.expect_commit_success();
+
         // *********** Setup LSUs ***********
         let key = Secp256k1PrivateKey::from_u64(1u64).unwrap().public_key();
         let validator_address = ledger.get_active_validator_with_key(&key);
@@ -135,11 +160,12 @@ impl TestEnvironment {
         receipt.expect_commit_success();
 
         // *********** Create many small liquidity positions ***********
+        // All with auto_unstake=true, auto_refill=true, refill_threshold=10000 for maximum compute intensity
         for _ in 0..30 {
-            for (discount, auto_unstake) in [
-                (dec!("0.010"), true),
-                (dec!("0.020"), true),
-                (dec!("0.025"), true),
+            for discount in [
+                dec!("0.010"),
+                dec!("0.020"),
+                dec!("0.025"),
             ] {
                 let manifest = ManifestBuilder::new()
                     .lock_fee_from_faucet()
@@ -148,8 +174,8 @@ impl TestEnvironment {
                     .call_method_with_name_lookup(liquify_component, "add_liquidity", |lookup| {(
                         lookup.bucket("xrd"),
                         discount,
-                        auto_unstake,
-                        true,      // auto_refill
+                        true,           // auto_unstake
+                        true,           // auto_refill
                         dec!("10000"),  // refill_threshold
                     )})
                     .call_method(
@@ -218,7 +244,7 @@ fn test_iteration_optimization() {
         .take_all_from_worktop(lsu_resource_address, "lsu")
         .call_method_with_name_lookup(liquify_component, "liquify_unstake", |lookup| {
             (lookup.bucket("lsu"),
-                33u8, // Test with 28 iterations
+                30u8, // Test with 30 iterations
         )
         })
         .call_method(

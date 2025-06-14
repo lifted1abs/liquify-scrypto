@@ -75,6 +75,31 @@ impl TestEnvironment {
         let owner_badge = receipt.expect_commit(true).new_resource_addresses()[0];
         let liquidity_receipt = receipt.expect_commit(true).new_resource_addresses()[1];
 
+        // *********** Enable the component (it starts disabled) ***********
+        let manifest = ManifestBuilder::new()
+            .lock_fee_from_faucet()
+            .create_proof_from_account_of_amount(
+                admin_account_address, 
+                owner_badge,
+                1,
+            )
+            .call_method(
+                liquify_component, 
+                "set_component_status", 
+                manifest_args!(true),
+            )
+            .call_method(
+                admin_account_address,
+                "deposit_batch",
+                manifest_args!(ManifestExpression::EntireWorktop),
+            )
+            .build();
+        let receipt = ledger.execute_manifest(
+            manifest,
+            vec![NonFungibleGlobalId::from_public_key(&admin_public_key)],
+        );
+        receipt.expect_commit_success();
+
         // *********** User 1 stakes XRD to validator to receive LSUs ***********
         let key = Secp256k1PrivateKey::from_u64(1u64).unwrap().public_key();
         let validator_address = ledger.get_active_validator_with_key(&key);

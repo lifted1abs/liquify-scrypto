@@ -75,6 +75,31 @@ impl TestEnvironment {
         let owner_badge = receipt.expect_commit(true).new_resource_addresses()[0];
         let liquidity_receipt = receipt.expect_commit(true).new_resource_addresses()[1];
 
+        // *********** Enable the component (it starts disabled) ***********
+        let manifest = ManifestBuilder::new()
+            .lock_fee_from_faucet()
+            .create_proof_from_account_of_amount(
+                admin_account_address, 
+                owner_badge,
+                1,
+            )
+            .call_method(
+                liquify_component, 
+                "set_component_status", 
+                manifest_args!(true),
+            )
+            .call_method(
+                admin_account_address,
+                "deposit_batch",
+                manifest_args!(ManifestExpression::EntireWorktop),
+            )
+            .build();
+        let receipt = ledger.execute_manifest(
+            manifest,
+            vec![NonFungibleGlobalId::from_public_key(&admin_public_key)],
+        );
+        receipt.expect_commit_success();
+
         // *********** Setup LSUs ***********
         let key = Secp256k1PrivateKey::from_u64(1u64).unwrap().public_key();
         let validator_address = ledger.get_active_validator_with_key(&key);
@@ -135,7 +160,8 @@ impl TestEnvironment {
         receipt.expect_commit_success();
 
         // *********** Create 50 small liquidity positions ***********
-        for _ in 0..50 {
+        // All with maximum compute intensity: auto_unstake=true, auto_refill=true, refill_threshold=10000
+        for _ in 0..200 {
             let manifest = ManifestBuilder::new()
                 .lock_fee_from_faucet()
                 .withdraw_from_account(user_account_address4, XRD, dec!(1))
@@ -143,9 +169,9 @@ impl TestEnvironment {
                 .call_method_with_name_lookup(liquify_component, "add_liquidity", |lookup| {(
                     lookup.bucket("xrd"),
                     dec!("0.0010"),
-                    false,      // auto_unstake
-                    false,      // auto_refill
-                    dec!("0"),  // refill_threshold
+                    true,           // auto_unstake
+                    true,           // auto_refill
+                    dec!("10000"),  // refill_threshold
                 )})
                 .call_method(
                     user_account_address4,
@@ -202,51 +228,18 @@ fn test_off_ledger_fills() {
     let lsu_resource_address = ledger.lsu_resource_address;
 
     // Create order keys - these would normally come from off-chain calculation
-    // Using sequential keys for the first 42 orders
-    let off_ledger_order_vec: Vec<u128> = vec![
-        184467440737095516161,  // order 1
-        184467440737095516162,  // order 2
-        184467440737095516163,  // order 3
-        184467440737095516164,  // order 4
-        184467440737095516165,  // order 5
-        184467440737095516166,  // order 6
-        184467440737095516167,  // order 7
-        184467440737095516168,  // order 8
-        184467440737095516169,  // order 9
-        184467440737095516170,  // order 10
-        184467440737095516171,  // order 11
-        184467440737095516172,  // order 12
-        184467440737095516173,  // order 13
-        184467440737095516174,  // order 14
-        184467440737095516175,  // order 15
-        184467440737095516176,  // order 16
-        184467440737095516177,  // order 17
-        184467440737095516178,  // order 18
-        184467440737095516179,  // order 19
-        184467440737095516180,  // order 20
-        184467440737095516181,  // order 21
-        184467440737095516182,  // order 22
-        184467440737095516183,  // order 23
-        184467440737095516184,  // order 24
-        184467440737095516185,  // order 25
-        184467440737095516186,  // order 26
-        184467440737095516187,  // order 27
-        184467440737095516188,  // order 28
-        184467440737095516189,  // order 29
-        184467440737095516190,  // order 30
-        184467440737095516191,  // order 31
-        184467440737095516192,  // order 32
-        184467440737095516193,  // order 33
-        184467440737095516194,  // order 34
-        184467440737095516195,  // order 35
-        184467440737095516196,  // order 36
-        184467440737095516197,  // order 37
-        184467440737095516198,  // order 38
-        184467440737095516199,  // order 39
-        184467440737095516200,  // order 40
-        184467440737095516201,  // order 41
-        184467440737095516202,  // order 42
-    ];
+    let mut off_ledger_order_vec: Vec<u128> = Vec::new();
+    let base_key: u128 = 184467440737095516161;
+    let num_orders = 200; // or however many you want to test
+    
+    // Generate sequential keys
+    for i in 0..num_orders {
+        off_ledger_order_vec.push(base_key + i);
+    }
+    
+    println!("Generated {} order keys", off_ledger_order_vec.len());
+    println!("First key: {}", off_ledger_order_vec[0]);
+    println!("Last key: {}", off_ledger_order_vec[off_ledger_order_vec.len() - 1]);
 
     // User 1 sells LSUs using off-ledger order selection
     let manifest = ManifestBuilder::new()

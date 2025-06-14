@@ -581,7 +581,7 @@ mod liquify_module {
         ///
         /// # Returns
         /// * A `Bucket` containing the automation fee amount in XRD as payment to the caller
-        pub fn cycle_liquidity(&mut self, receipt_id: NonFungibleLocalId) -> Bucket {
+        pub fn cycle_liquidity(&mut self, receipt_id: NonFungibleLocalId, max_fills_to_process: u64) -> Bucket {
             let nft_data: LiquidityReceipt = self.liquidity_receipt.get_non_fungible_data(&receipt_id);
             let global_id = NonFungibleGlobalId::new(self.liquidity_receipt.address(), receipt_id.clone());
             
@@ -593,26 +593,33 @@ mod liquify_module {
             
             assert!(auto_refill, "Automation not enabled for this receipt");
             assert!(auto_unstake, "Can only cycle receipts with auto_unstake enabled");
+            assert!(max_fills_to_process > 0, "Must process at least one fill");
             
-            // Calculate claimable XRD from fills
-            let claimable_xrd = self.calculate_claimable_xrd(&receipt_id);
+            // Calculate claimable XRD from fills (limited by max_fills_to_process)
+            let claimable_xrd = self.calculate_limited_claimable_xrd(&receipt_id, max_fills_to_process);
             assert!(claimable_xrd >= refill_threshold, "Not enough claimable XRD to meet threshold");
             
-            // Collect all fills for this receipt
+            // Collect fills for this receipt (limited by max_fills_to_process)
             let mut total_xrd = Bucket::new(XRD);
             let receipt_id_u64 = match receipt_id.clone() {
                 NonFungibleLocalId::Integer(i) => i.value(),
                 _ => panic!("Invalid NFT ID type")
             };
             
-            // Process all fills for this receipt
+            // Process fills for this receipt
             let start_key = CombinedKey::new(receipt_id_u64, 1, 0).key;
             let end_key = CombinedKey::new(receipt_id_u64, u32::MAX, 0).key;
             
-            // Collect keys and data first, then process
+            // Collect keys and data first, then process (limited by max_fills_to_process)
             let mut fills_to_process = Vec::new();
+            let mut fills_collected = 0u64;
+            
             for (key, value, _) in self.order_fill_tree.range(start_key..=end_key) {
+                if fills_collected >= max_fills_to_process {
+                    break;
+                }
                 fills_to_process.push((key, value.clone()));
+                fills_collected += 1;
             }
             
             // Now process the fills
@@ -640,7 +647,7 @@ mod liquify_module {
             
             // Update KVS data
             let mut kvs_data = self.liquidity_data.get_mut(&global_id).unwrap();
-            kvs_data.fills_to_collect = 0;
+            kvs_data.fills_to_collect = kvs_data.fills_to_collect.saturating_sub(fills_collected);
             
             // Take automation fee
             let fee_amount = self.automation_fee;
@@ -693,6 +700,56 @@ mod liquify_module {
             
             // Return the automation fee to the caller
             automation_fee_bucket
+        }
+
+        fn calculate_limited_claimable_xrd(&self, receipt_id: &NonFungibleLocalId, max_fills: u64) -> Decimal {
+            let receipt_id_u64 = match receipt_id {
+                NonFungibleLocalId::Integer(i) => i.value(),
+                _ => return dec!(0)
+            };
+            
+            let start_key = CombinedKey::new(receipt_id_u64, 1, 0).key;
+            let end_key = CombinedKey::new(receipt_id_u64, u32::MAX, 0).key;
+            
+            let mut total_claimable = dec!(0);
+            let mut fills_checked = 0u64;
+            
+            for (_, unstake_nft_or_lsu, _) in self.order_fill_tree.range(start_key..=end_key) {
+                if fills_checked >= max_fills {
+                    break;
+                }
+                
+                match unstake_nft_or_lsu {
+                    UnstakeNFTOrLSU::UnstakeNFT(unstake_nft_data) => {
+                        let nft_manager = ResourceManager::from(unstake_nft_data.resource_address);
+                        
+                        // Get claim_amount and claim_epoch from metadata
+                        let claim_amount: Decimal = nft_manager
+                            .get_metadata("claim_amount")
+                            .unwrap()
+                            .unwrap_or_else(|| Runtime::panic(String::from("Invalid stake claim NFT - no claim_amount")));
+                        
+                        let claim_epoch: u64 = nft_manager
+                            .get_metadata("claim_epoch")
+                            .unwrap()
+                            .unwrap_or_else(|| Runtime::panic(String::from("Invalid stake claim NFT - no claim_epoch")));
+                        
+                        // Check if past the unbonding period
+                        let current_epoch = Runtime::current_epoch().number();
+                        if current_epoch >= claim_epoch {
+                            total_claimable += claim_amount;
+                        }
+                    }
+                    UnstakeNFTOrLSU::LSU(_) => {
+                        // LSUs are NOT claimable for XRD - they need to be collected first
+                        // They contribute 0 to claimable XRD
+                    }
+                }
+                
+                fills_checked += 1;
+            }
+            
+            total_claimable
         }
 
         /// Gets the claimable XRD amount for a liquidity position.
