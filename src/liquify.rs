@@ -439,6 +439,9 @@ mod liquify_module {
                 "Total liquidity after increase would be below the minimum liquidity requirement"
             );
             
+            // Store the amount for the event before consuming the bucket
+            let additional_xrd_amount = xrd_bucket.amount();
+            
             // Get current discount
             let discount_u64 = (nft_data.discount * dec!(10000)).checked_floor().unwrap().to_string().parse::<u64>().unwrap();
             
@@ -457,7 +460,7 @@ mod liquify_module {
             }
             
             // Update KVS data
-            kvs_data.xrd_liquidity_available += xrd_bucket.amount();
+            kvs_data.xrd_liquidity_available += additional_xrd_amount;
             let current_epoch = Runtime::current_epoch().number() as u32;
             kvs_data.last_added_epoch = current_epoch;
             
@@ -466,14 +469,20 @@ mod liquify_module {
             self.liquidity_receipt_counter += 1;
             
             // Reinsert at new position
-            self.buy_list.insert(new_combined_key.key, global_id);
+            self.buy_list.insert(new_combined_key.key, global_id.clone());
             
             // Update liquidity index
             let index_usize = (nft_data.discount / dec!(0.00025)).checked_floor().unwrap().to_string().parse::<usize>().unwrap();
-            self.liquidity_index[index_usize] += xrd_bucket.amount();
+            self.liquidity_index[index_usize] += additional_xrd_amount;
             
-            self.total_xrd_locked += xrd_bucket.amount();
+            self.total_xrd_locked += additional_xrd_amount;
             self.xrd_liquidity.put(xrd_bucket);
+            
+            // Emit the event
+            Runtime::emit_event(LiquidityIncreasedEvent {
+                receipt_id: local_id,
+                additional_xrd: additional_xrd_amount,
+            });
             
             receipt_bucket
         }
@@ -548,6 +557,13 @@ mod liquify_module {
             // Update NFT data
             self.liquidity_receipt.update_non_fungible_data(&local_id, "auto_refill", auto_refill);
             self.liquidity_receipt.update_non_fungible_data(&local_id, "refill_threshold", refill_threshold);
+            
+            // Emit the automation update event
+            Runtime::emit_event(AutomationUpdatedEvent {
+                receipt_id: local_id,
+                auto_refill,
+                refill_threshold,
+            });
             
             receipt_bucket
         }
@@ -667,6 +683,13 @@ mod liquify_module {
             // Put XRD in vault
             self.xrd_liquidity.put(total_xrd);
             self.total_xrd_locked += xrd_to_add;
+            
+            // Emit the cycle event
+            Runtime::emit_event(LiquidityCycledEvent {
+                receipt_id,
+                xrd_amount_cycled: xrd_to_add,
+                automation_fee: fee_amount,
+            });
             
             // Return the automation fee to the caller
             automation_fee_bucket
@@ -875,7 +898,7 @@ mod liquify_module {
             }
 
             let mut total_order_size: Decimal = Decimal::ZERO;
-        
+
             for local_id in liquidity_receipt_bucket.as_non_fungible().non_fungible_local_ids() {
                 let nft_data: LiquidityReceipt = self.liquidity_receipt.get_non_fungible_data(&local_id);
                 let global_id = NonFungibleGlobalId::new(self.liquidity_receipt.address(), local_id.clone());
@@ -914,11 +937,11 @@ mod liquify_module {
                         self.automated_liquidity_index -= 1;
                     }
                 }
-        
+
                 let index = (discount / dec!(0.00025)).checked_floor().unwrap().to_string().parse::<usize>().unwrap();
                 let currently_liquidity_at_discount = self.liquidity_index[index];
                 self.liquidity_index[index] = currently_liquidity_at_discount - order_size;
-        
+
                 total_order_size += order_size;
 
                 // Find and remove from AVL tree
@@ -937,11 +960,17 @@ mod liquify_module {
                 
                 // Update KVS data
                 kvs_data.xrd_liquidity_available = dec!(0);
+                
+                // Emit the event for this receipt
+                Runtime::emit_event(LiquidityRemovedEvent {
+                    receipt_id: local_id,
+                    xrd_amount: order_size,
+                });
             }
-        
+
             let user_funds = self.xrd_liquidity.take(total_order_size);
             self.total_xrd_locked -= total_order_size;
-        
+
             (user_funds, liquidity_receipt_bucket)
         }
 
@@ -1005,6 +1034,10 @@ mod liquify_module {
             let mut xrd_bucket: Bucket = Bucket::new(XRD);
             let mut validator = self.get_validator_from_lsu(lsu_bucket.resource_address());
             
+            // Store initial values for event
+            let lsu_resource = lsu_bucket.resource_address();
+            let initial_lsu_amount = lsu_bucket.amount();
+            
             // Pre-calculate redemption rate
             let redemption_rate = validator.get_redemption_value(dec!(1));
             let mut remaining_lsus = lsu_bucket.amount();
@@ -1067,7 +1100,7 @@ mod liquify_module {
                     avl_removals.push(key);
                 }
                 
-                kvs_updates.push((global_id, new_xrd_available, fill_amount, current_fills + 1));
+                kvs_updates.push((global_id.clone(), new_xrd_available, fill_amount, current_fills + 1));
                 
                 // Aggregate index updates
                 let index = (discount / dec!(0.00025)).checked_floor().unwrap().to_string().parse::<usize>().unwrap();
@@ -1090,6 +1123,14 @@ mod liquify_module {
                     }
                     self.component_vaults.get_mut(&resource).unwrap().as_fungible().put(lsu_taken);
                 }
+                
+                // Emit OrderFillEvent for this fill
+                Runtime::emit_event(OrderFillEvent {
+                    receipt_id: local_id.clone(),
+                    lsu_amount: lsu_to_take,
+                    xrd_amount: fill_amount,
+                    discount,
+                });
 
                 if remaining_lsus.is_zero() {
                     break;
@@ -1158,6 +1199,17 @@ mod liquify_module {
             let fee_bucket = xrd_bucket.take(xrd_bucket.amount() * self.platform_fee);
             self.fee_vault.put(fee_bucket);
             
+            // Calculate actual amounts for event
+            let lsu_amount_processed = initial_lsu_amount - lsu_bucket.amount();
+            let xrd_received = xrd_bucket.amount();
+            
+            // Emit the unstake event
+            Runtime::emit_event(LiquifyUnstakeEvent {
+                lsu_resource,
+                lsu_amount: lsu_amount_processed,
+                xrd_received,
+            });
+            
             (xrd_bucket, lsu_bucket)
         }
         
@@ -1187,6 +1239,9 @@ mod liquify_module {
             let mut bucket_vec: Vec<Bucket> = Vec::new();
             let mut collect_counter: u64 = 0;
             let mut all_updates = vec![];
+            
+            // Track event data
+            let mut event_data_per_receipt: std::collections::HashMap<NonFungibleLocalId, (u64, Vec<(Decimal, ResourceAddress)>, Vec<NonFungibleGlobalId>)> = std::collections::HashMap::new();
 
             for order_id in liquidity_receipt_bucket.as_non_fungible().non_fungible_local_ids() {
                 let global_id = NonFungibleGlobalId::new(self.liquidity_receipt.address(), order_id.clone());
@@ -1213,6 +1268,8 @@ mod liquify_module {
 
                 let mut fills_collected_for_this_order: u64 = 0;
                 let mut fills_to_remove = Vec::new();
+                let mut lsus_collected = Vec::new();
+                let mut stake_claim_nfts_collected = Vec::new();
 
                 // First, collect the fills we need to process
                 for (key, value, _) in self.order_fill_tree.range(start_key..=end_key) {
@@ -1234,6 +1291,10 @@ mod liquify_module {
                             let lsu_amount = lsu_data.amount;
                             let mut lsu_vault = self.component_vaults.get_mut(&lsu_resource).unwrap();
                             lsu_bucket.put(lsu_vault.take(lsu_amount));
+                            
+                            // Track for event
+                            lsus_collected.push((lsu_amount, lsu_resource));
+                            
                             bucket_vec.push(lsu_bucket);
                         }
 
@@ -1242,6 +1303,11 @@ mod liquify_module {
                             let unstake_nft_id = &unstake_nft_data.id;
                             let unstake_nft_vault = self.component_vaults.get_mut(&unstake_nft_data.resource_address).unwrap();
                             unstake_nft_bucket.put(unstake_nft_vault.as_non_fungible().take_non_fungible(&unstake_nft_id).into());
+                            
+                            // Track for event
+                            let nft_global_id = NonFungibleGlobalId::new(unstake_nft_data.resource_address, unstake_nft_id.clone());
+                            stake_claim_nfts_collected.push(nft_global_id);
+                            
                             bucket_vec.push(unstake_nft_bucket);
                         }
                     }
@@ -1251,12 +1317,30 @@ mod liquify_module {
 
                 let new_fills_to_collect = fills_to_collect - fills_collected_for_this_order;
                 all_updates.push((global_id, new_fills_to_collect));
+                
+                // Store event data for this receipt
+                if fills_collected_for_this_order > 0 {
+                    event_data_per_receipt.insert(
+                        order_id.clone(),
+                        (fills_collected_for_this_order, lsus_collected, stake_claim_nfts_collected)
+                    );
+                }
             }
 
             // Apply all KVS updates
             for (global_id, new_fills_to_collect) in all_updates {
                 let mut kvs_data = self.liquidity_data.get_mut(&global_id).unwrap();
                 kvs_data.fills_to_collect = new_fills_to_collect;
+            }
+            
+            // Emit events for each receipt that had fills collected
+            for (receipt_id, (fills_collected, lsus, nfts)) in event_data_per_receipt {
+                Runtime::emit_event(CollectFillsEvent {
+                    receipt_id,
+                    fills_collected,
+                    lsus_collected: lsus,
+                    stake_claim_nfts_collected: nfts,
+                });
             }
 
             (bucket_vec, liquidity_receipt_bucket)
