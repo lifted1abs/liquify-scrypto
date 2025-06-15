@@ -1,4 +1,6 @@
 use scrypto_test::prelude::*;
+// use radix_engine::updates::*;
+// use radix_engine_interface::blueprints::consensus_manager::*;
 
 #[derive(Clone)]
 pub struct Account {
@@ -20,7 +22,26 @@ pub struct TestEnvironment {
 
 impl TestEnvironment {
     pub fn instantiate_test() -> Self {
-        let mut ledger = LedgerSimulatorBuilder::new().without_kernel_trace().build();
+        // Configure consensus manager with realistic settings
+        let genesis = BabylonSettings::test_default()
+            .with_consensus_manager_config(
+                ConsensusManagerConfig::test_default()
+                    .with_epoch_change_condition(EpochChangeCondition {
+                        min_round_count: 100,
+                        max_round_count: 100,
+                        target_duration_millis: 60_000, // 1 minute
+                    })
+                    .with_num_unstake_epochs(500) // Set 500 epoch unbonding period
+            );
+
+        let mut ledger = LedgerSimulatorBuilder::new()
+            .with_custom_protocol(|builder| {
+                builder
+                    .configure_babylon(|_| genesis)
+                    .from_bootstrap_to_latest()
+            })
+            .without_kernel_trace()
+            .build();
 
         // Create accounts
         let (admin_public_key, _admin_private_key, admin_account_address) = ledger.new_allocated_account();
@@ -260,33 +281,61 @@ fn test_cycle_liquidity_full_flow() {
         .build();
     
     let receipt = ledger.execute_manifest(manifest, ledger.user_account1.clone());
-    println!("Claimable XRD check result: {}", if receipt.is_commit_success() { "SUCCESS" } else { "FAILED" });
+    println!("Claimable XRD check result: {}", if receipt.is_commit_success() { "SUCCESS - Should be 0 XRD" } else { "FAILED" });
 
-    // Step 4: PROPERLY advance 501 epochs
-    println!("\nStep 4: Advancing 501 epochs to pass unbonding period...");
+    // Step 4: Try to cycle BEFORE passing unbonding period (should fail)
+    println!("\nStep 4: Attempting to cycle liquidity BEFORE unbonding period (should fail)...");
+    let manifest = ManifestBuilder::new()
+        .lock_fee_from_faucet()
+        .call_method(
+            liquify_component,
+            "cycle_liquidity",
+            manifest_args!(
+                receipt_id.clone(),
+                10u64
+            ),
+        )
+        .call_method(
+            user_account1,
+            "deposit_batch",
+            manifest_args!(ManifestExpression::EntireWorktop),
+        )
+        .build();
+    
+    let receipt = ledger.execute_manifest(manifest, ledger.user_account1.clone());
+    if receipt.is_commit_success() {
+        println!("✗ ERROR: Cycle succeeded when it should have failed!");
+        println!("This means the unbonding period is not being enforced correctly.");
+    } else {
+        println!("✓ Good: Cycle failed as expected (unbonding period not met)");
+    }
+
+    // Step 5: Advance 501 epochs
+    println!("\nStep 5: Advancing 501 epochs to pass unbonding period...");
     let current_epoch = ledger.ledger.get_current_epoch();
     let current_round = ledger.ledger.get_consensus_manager_state().round;
     println!("Current epoch: {}", current_epoch.number());
     println!("Current round: {}", current_round.number());
     
-    // We need to figure out how many rounds per epoch
-    // Let's advance by a large number of rounds to ensure we pass 501 epochs
-    // If we assume ~1000 rounds per epoch (common in tests), we need 501,000 rounds
-    let target_round = current_round.number() + 501_000;
+    // With 100 rounds per epoch, we need 50,100 rounds for 501 epochs
+    let rounds_to_advance = 501 * 100;
+    let target_round = current_round.number() + rounds_to_advance;
     
-    println!("Advancing to round {} to pass unbonding period...", target_round);
+    println!("Advancing {} rounds to pass unbonding period...", rounds_to_advance);
     ledger.ledger.advance_to_round(Round::of(target_round));
     
     let new_epoch = ledger.ledger.get_current_epoch();
     println!("✓ Advanced to epoch: {}", new_epoch.number());
     
-    // Verify we actually advanced enough epochs
-    if new_epoch.number() < current_epoch.number() + 500 {
-        println!("WARNING: Only advanced {} epochs, expected 501+", new_epoch.number() - current_epoch.number());
+    let epochs_advanced = new_epoch.number() - current_epoch.number();
+    if epochs_advanced >= 500 {
+        println!("✓ Successfully advanced {} epochs", epochs_advanced);
+    } else {
+        println!("✗ WARNING: Only advanced {} epochs, expected 500+", epochs_advanced);
     }
 
-    // Step 5: Check claimable XRD after epoch advancement
-    println!("\nStep 5: Checking claimable XRD after epoch advancement...");
+    // Step 6: Check claimable XRD after epoch advancement
+    println!("\nStep 6: Checking claimable XRD after epoch advancement...");
     let manifest = ManifestBuilder::new()
         .lock_fee_from_faucet()
         .call_method(
@@ -297,10 +346,11 @@ fn test_cycle_liquidity_full_flow() {
         .build();
     
     let receipt = ledger.execute_manifest(manifest, ledger.user_account1.clone());
-    println!("Claimable XRD check after advancement: {}", if receipt.is_commit_success() { "SUCCESS" } else { "FAILED" });
+    println!("Claimable XRD check after advancement: {}", 
+        if receipt.is_commit_success() { "SUCCESS - Should show ~990 XRD" } else { "FAILED" });
 
-    // Step 6: Attempt to cycle liquidity
-    println!("\nStep 6: Attempting to cycle liquidity...");
+    // Step 7: Attempt to cycle liquidity (should work now)
+    println!("\nStep 7: Attempting to cycle liquidity after unbonding period...");
     
     let user1_xrd_before = ledger.ledger.get_component_balance(user_account1, XRD);
     println!("User1 XRD balance before cycle: {}", user1_xrd_before);
@@ -323,17 +373,6 @@ fn test_cycle_liquidity_full_flow() {
         .build();
     
     let receipt = ledger.execute_manifest(manifest, ledger.user_account1.clone());
-    println!("{:?}\n", receipt);
+
     
-    if receipt.is_commit_success() {
-        println!("✓ Successfully cycled liquidity!");
-        
-        let user1_xrd_after = ledger.ledger.get_component_balance(user_account1, XRD);
-        let automation_fee_received = user1_xrd_after - user1_xrd_before;
-        println!("User1 XRD balance after cycle: {}", user1_xrd_after);
-        println!("Automation fee received: {} XRD", automation_fee_received);
-    } else {
-        println!("✗ Failed to cycle liquidity");
-        println!("This should only succeed if we're past the unbonding period");
-    }
 }
