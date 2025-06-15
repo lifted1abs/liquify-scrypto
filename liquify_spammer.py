@@ -210,21 +210,34 @@ async def main():
         amount_spammed = int(input("\nAmount spammed already: "))
         
         # New submenu for amount type
-        amount_type = int(input("\nChoose amount type:\n1) Random amounts\n2) Set amount\n"))
+        amount_type = int(input("\nChoose amount type:\n1) Random amounts (default: 100k-500k)\n2) Custom random range\n3) Set amount\n"))
         
         if amount_type == 2:
+            # Custom range option
+            min_amount = int(input("\nEnter minimum amount (XRD): "))
+            max_amount = int(input("Enter maximum amount (XRD): "))
+            print(f"Will use random amounts between {min_amount:,} and {max_amount:,} XRD")
+            # We'll need to pass these to the function
+            set_amount = None
+            custom_range = (min_amount, max_amount)
+        elif amount_type == 3:
             # Set amount option
             set_amount = int(input("\nEnter set amount for each transaction (XRD): "))
-            print(f"Will use {set_amount} XRD worth of LSUs for each transaction")
+            print(f"Will use {set_amount:,} XRD worth of LSUs for each transaction")
+            custom_range = None
         else:
             # Random amount (default)
             set_amount = None
+            custom_range = None
             print("Will use random amounts between 100,000 and 500,000 XRD worth of LSUs")
         
         start_spamming_question = input("\n!! Double-check your input !!\n\nStart spamming unstakes? y/n: ")
     
         if (start_spamming_question.lower() == "y"):
-            await start_spamming_unstakes(spammer_info, amount_spammed, set_amount)
+            if custom_range:
+                await start_spamming_unstakes(spammer_info, amount_spammed, set_amount, custom_range)
+            else:
+                await start_spamming_unstakes(spammer_info, amount_spammed, set_amount)
         else:
             print("Exiting now.")
             exit()     
@@ -318,7 +331,10 @@ async def start_spamming_liquidity(spammer_info: SpammerInfo, amount_spammed = 0
         # Check account balance before transaction
         xrd_balance = await check_account_balance(spammer_info, spammer_info.account.as_str())
         
-        print(f"\n=== Transaction {transaction_count + 1} ===")
+        # INCREMENT transaction_count HERE before printing
+        transaction_count += 1
+        
+        print(f"\n=== Transaction {transaction_count} ===")
         print(f"Current XRD balance: {xrd_balance}")
         print(f"Amount to provide: {amount} XRD")
         print(f"Discount: {discount/1000:.3f}%")
@@ -406,7 +422,6 @@ async def start_spamming_liquidity(spammer_info: SpammerInfo, amount_spammed = 0
                 print(f"  Receipt sent to: {DEV_ADDRESS}")
                 amount_spammed += amount
                 successful_transactions += 1
-                transaction_count += 1
             elif result["status"] == "duplicate":
                 print(f"⚠ DUPLICATE: Transaction already submitted")
                 failed_transactions += 1
@@ -445,11 +460,12 @@ async def start_spamming_liquidity(spammer_info: SpammerInfo, amount_spammed = 0
 #
 # Spam the Liquify component with ~105M XRD in unstakes
 #
-async def start_spamming_unstakes(spammer_info: SpammerInfo, amount_spammed = 0, set_amount = None) -> None:
+async def start_spamming_unstakes(spammer_info: SpammerInfo, amount_spammed = 0, set_amount = None, custom_range = None) -> None:
     spammer_info.current_epoch = await get_current_epoch(spammer_info)
 
     print(f"Start spamming assuming {amount_spammed} XRD already unstaked...")
 
+    transaction_count = 0
     successful_transactions = 0
     failed_transactions = 0
 
@@ -458,8 +474,13 @@ async def start_spamming_unstakes(spammer_info: SpammerInfo, amount_spammed = 0,
         # Use set_amount if provided, otherwise generate random amount
         if set_amount is not None:
             amount = set_amount
+        elif custom_range is not None:
+            amount = random.randrange(custom_range[0], custom_range[1])
         else:
-            amount = random.randrange(100_000, 500_000) # 100k - 500k
+            amount = random.randrange(100_000, 500_000) # Default: 100k - 500k
+
+        # INCREMENT transaction_count HERE
+        transaction_count += 1
 
         try:
             manifest = await build_unstake_manifest(
@@ -473,8 +494,9 @@ async def start_spamming_unstakes(spammer_info: SpammerInfo, amount_spammed = 0,
                 spammer_info
             )
 
-            print(f"\n{get_timestamp()}: Submitting {signed_transaction.intent_hash().as_str()}")
-            print(f"Unstaking {amount} XRD worth of LSUs")
+            print(f"\n{get_timestamp()}: Transaction {transaction_count}")
+            print(f"Submitting {signed_transaction.intent_hash().as_str()}")
+            print(f"Unstaking {amount:,} XRD worth of LSUs")
             
             # Submit transaction
             result = await submit_transaction(
@@ -487,7 +509,7 @@ async def start_spamming_unstakes(spammer_info: SpammerInfo, amount_spammed = 0,
                 print(f"✓ SUCCESS: Transaction committed successfully!")
                 amount_spammed += amount
                 successful_transactions += 1
-                print(f"Total amount unstaked: {amount_spammed} XRD worth of LSUs.")
+                print(f"Total amount unstaked: {amount_spammed:,} XRD worth of LSUs.")
             else:
                 print(f"✗ FAILED: Transaction status: {result['status']}")
                 failed_transactions += 1

@@ -327,7 +327,45 @@ async def main():
                 print(f"LIQUIFY_OWNER_BADGE: {addresses[1]}")
                 print(f"LIQUIFY_LIQUIDITY_RECEIPT: {addresses[2]}")
 
-            # Transfer owner badges to your personal address
+            # Enable the component BEFORE transferring badges
+            if 'LIQUIFY_COMPONENT' in config_data:
+                print("\n=== Enabling Liquify Component ===")
+                
+                manifest = f"""
+                CALL_METHOD
+                    Address("{account.as_str()}")
+                    "lock_fee"
+                    Decimal("10")
+                ;
+                CALL_METHOD
+                    Address("{account.as_str()}")
+                    "create_proof_of_amount"
+                    Address("{config_data['LIQUIFY_OWNER_BADGE']}")
+                    Decimal("1")
+                ;
+                CALL_METHOD
+                    Address("{config_data['LIQUIFY_COMPONENT']}")
+                    "set_component_status"
+                    true
+                ;
+                CALL_METHOD
+                    Address("{account.as_str()}")
+                    "deposit_batch"
+                    Expression("ENTIRE_WORKTOP")
+                ;
+                """
+                
+                print("Enabling component...")
+                payload, intent = await gateway.build_transaction_str(manifest, public_key, private_key)
+                await gateway.submit_transaction(payload)
+                status = await gateway.get_transaction_status(intent)
+                
+                if status == "CommittedSuccess":
+                    print("✓ Component enabled successfully!")
+                else:
+                    print(f"✗ Failed to enable component: {status}")
+
+            # Transfer owner badges to your personal address AFTER enabling
             if 'LIQUIFY_OWNER_BADGE' in config_data and PERSONAL_ADDRESS:
                 print("\n=== Transferring Owner Badges ===")
                 
