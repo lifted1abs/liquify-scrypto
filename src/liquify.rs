@@ -150,15 +150,15 @@ mod liquify_module {
             cycle_liquidity => PUBLIC;
             get_claimable_xrd => PUBLIC;
             get_liquidity_data => PUBLIC;
+            get_buy_list_range => PUBLIC;
+            get_liquidity_data_range => PUBLIC;
+            get_automated_liquidity_range => PUBLIC;
             set_component_status => restrict_to: [owner];
             set_platform_fee => restrict_to: [owner];
             set_automation_fee => restrict_to: [owner];
             collect_platform_fees => restrict_to: [owner];
             set_minimum_liquidity => restrict_to: [owner];
             set_receipt_image_url => restrict_to: [owner];
-            get_buy_list_range => PUBLIC;
-            get_liquidity_data_range => PUBLIC;
-            get_automated_liquidity_range => PUBLIC;
             set_minimum_refill_threshold => restrict_to: [owner];
         }
     }
