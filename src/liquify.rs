@@ -580,6 +580,26 @@ mod liquify_module {
             receipt_bucket
         }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         /// Cycles liquidity by claiming fills and re-adding as liquidity.
         /// 
         /// This method allows automated systems or users to cycle a liquidity position by claiming all available
@@ -665,7 +685,7 @@ mod liquify_module {
             // Take automation fee
             let fee_amount = self.automation_fee;
             let automation_fee_bucket = total_xrd.take(fee_amount);
-            // Don't put it in fee_vault - we'll return it to the caller
+
             
             // Find and remove from current position in AVL tree
             let mut key_to_remove = None;
@@ -714,6 +734,41 @@ mod liquify_module {
             // Return the automation fee to the caller
             automation_fee_bucket
         }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
         fn calculate_limited_claimable_xrd(&self, receipt_id: &NonFungibleLocalId, max_fills: u64) -> Decimal {
             let receipt_id_u64 = match receipt_id {
