@@ -621,6 +621,19 @@ mod liquify_module {
 
 
 
+        
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -642,379 +655,175 @@ mod liquify_module {
         /// # Returns
         /// * A `Bucket` containing the automation fee amount in XRD as payment to the caller
 
-pub fn cycle_liquidity(&mut self, receipt_id: NonFungibleLocalId, max_fills_to_process: u64) -> FungibleBucket {
-    let nft_data: LiquidityReceipt = self.liquidity_receipt.get_non_fungible_data(&receipt_id);
-    let global_id = NonFungibleGlobalId::new(self.liquidity_receipt.address(), receipt_id.clone());
-    
-    // Get data, check conditions, then drop the borrow
-    let (auto_refill, auto_unstake, refill_threshold, discount) = {
-        let kvs_data = self.liquidity_data.get(&global_id).unwrap();
-        (nft_data.auto_refill, nft_data.auto_unstake, nft_data.refill_threshold, nft_data.discount)
-    };
-    
-    assert!(auto_refill, "Automation not enabled for this receipt");
-    assert!(auto_unstake, "Can only cycle receipts with auto_unstake enabled");
-    assert!(max_fills_to_process > 0, "Must process at least one fill");
-    
-    // Calculate claimable XRD from fills (limited by max_fills_to_process)
-    let claimable_xrd = self.calculate_limited_claimable_xrd(&receipt_id, max_fills_to_process);
-    assert!(claimable_xrd >= refill_threshold, "Not enough claimable XRD to meet threshold");
-    
-    // Collect fills for this receipt (limited by max_fills_to_process)
-    let mut total_xrd = FungibleBucket::new(XRD);
-    let receipt_id_u64 = match receipt_id.clone() {
-        NonFungibleLocalId::Integer(i) => i.value(),
-        _ => panic!("Invalid NFT ID type")
-    };
-    
-    // Process fills for this receipt
-    let start_key = CombinedKey::new(receipt_id_u64, 1, 0).key;
-    let end_key = CombinedKey::new(receipt_id_u64, u32::MAX, 0).key;
-    
-    // Collect keys and data first, then process (limited by max_fills_to_process)
-    let mut fills_to_process = Vec::new();
-    let mut fills_collected = 0u64;
-    
-    for (key, value, _) in self.order_fill_tree.range(start_key..=end_key) {
-        if fills_collected >= max_fills_to_process {
-            break;
-        }
-        fills_to_process.push((key, value.clone()));
-        fills_collected += 1;
-    }
-    
-    // Now process the fills
-    for (avl_key, unstake_nft_or_lsu) in fills_to_process {
-        match unstake_nft_or_lsu {
-            UnstakeNFTOrLSU::UnstakeNFT(unstake_nft_data) => {
-                let local_id: NonFungibleLocalId = unstake_nft_data.id.clone();
-                
-                // Check if NFT is ready to claim
-                let nft_data: UnstakeData = NonFungibleResourceManager::from(unstake_nft_data.resource_address)
-                    .get_non_fungible_data(&local_id);
-                let current_epoch = Runtime::current_epoch();
-                
-                match current_epoch >= nft_data.claim_epoch {
-                    true => {
-                        // NFT is ready to claim
-                        let unstake_nft_vault = self.component_vaults.get(&unstake_nft_data.resource_address).unwrap();
-                        let unstake_nft = unstake_nft_vault.as_non_fungible().take_non_fungible(&local_id);
-                        let validator_address = self.get_validator_from_unstake_nft(&unstake_nft_data.resource_address);
-                        let mut validator: Global<Validator> = Global::from(validator_address);
-                        let claimed_xrd = validator.claim_xrd(unstake_nft);
-                        total_xrd.put(claimed_xrd);
-                    }
-                    false => {
-                        // NFT not ready yet, skip this fill
-                        continue;
-                    }
-                }
-            }
-            UnstakeNFTOrLSU::LSU(_) => {
-                panic!("Cannot cycle LSU fills - receipt must have auto_unstake enabled");
-            }
-        }
-        
-        // Remove the processed fill
-        self.order_fill_tree.remove(&avl_key);
-    }
-    
-    // Update KVS data
-    let mut kvs_data = self.liquidity_data.get_mut(&global_id).unwrap();
-    kvs_data.fills_to_collect = kvs_data.fills_to_collect.saturating_sub(fills_collected);
-    
-    // Take automation fee
-    let fee_amount = self.automation_fee;
-    let automation_fee_bucket = total_xrd.take(fee_amount);
-    
-    // Find and remove from current position in AVL tree
-    let mut key_to_remove = None;
-    for (key, tree_global_id, _) in self.buy_list.range(0..u128::MAX) {
-        if tree_global_id == global_id {
-            key_to_remove = Some(key);
-            break;
-        }
-    }
-    
-    if let Some(key) = key_to_remove {
-        self.buy_list.remove(&key);
-    }
-    
-    // Add remaining XRD back to liquidity
-    let xrd_to_add = total_xrd.amount();
-    
-    // Update KVS data
-    kvs_data.xrd_liquidity_available += xrd_to_add;
-    let current_epoch = Runtime::current_epoch().number() as u32;
-    kvs_data.last_added_epoch = current_epoch;
-    
-    // Create new key with current epoch
-    let discount_u64 = (discount * dec!(10000)).checked_floor().unwrap().to_string().parse::<u64>().unwrap();
-    let new_combined_key = CombinedKey::new(discount_u64, current_epoch, self.liquidity_receipt_counter);
-    self.liquidity_receipt_counter += 1;
-    
-    // Reinsert at new position
-    self.buy_list.insert(new_combined_key.key, global_id);
-    
-    // Update liquidity index
-    let index_usize = (discount / dec!(0.00025)).checked_floor().unwrap().to_string().parse::<usize>().unwrap();
-    self.liquidity_index[index_usize] += xrd_to_add;
-    
-    // Put XRD in vault
-    self.xrd_liquidity.as_fungible().put(total_xrd);
-    self.total_xrd_locked += xrd_to_add;
-    
-    // Emit the cycle event
-    Runtime::emit_event(LiquidityCycledEvent {
-        receipt_id,
-        xrd_amount_cycled: xrd_to_add,
-        automation_fee: fee_amount,
-    });
-    
-    // Return the automation fee to the caller
-    automation_fee_bucket
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        fn calculate_limited_claimable_xrd(&self, receipt_id: &NonFungibleLocalId, max_fills: u64) -> Decimal {
-            let receipt_id_u64 = match receipt_id {
-                NonFungibleLocalId::Integer(i) => i.value(),
-                _ => return dec!(0)
+        pub fn cycle_liquidity(&mut self, receipt_id: NonFungibleLocalId, max_fills_to_process: u64) -> FungibleBucket {
+            let nft_data: LiquidityReceipt = self.liquidity_receipt.get_non_fungible_data(&receipt_id);
+            let global_id = NonFungibleGlobalId::new(self.liquidity_receipt.address(), receipt_id.clone());
+            
+            // Get data, check conditions, then drop the borrow
+            let (auto_refill, auto_unstake, refill_threshold, discount) = {
+                let kvs_data = self.liquidity_data.get(&global_id).unwrap();
+                (nft_data.auto_refill, nft_data.auto_unstake, nft_data.refill_threshold, nft_data.discount)
             };
             
+            assert!(auto_refill, "Automation not enabled for this receipt");
+            assert!(auto_unstake, "Can only cycle receipts with auto_unstake enabled");
+            assert!(max_fills_to_process > 0, "Must process at least one fill");
+            
+            // Calculate claimable XRD from fills (limited by max_fills_to_process)
+            let claimable_xrd = self.calculate_limited_claimable_xrd(&receipt_id, max_fills_to_process);
+            assert!(claimable_xrd >= refill_threshold, "Not enough claimable XRD to meet threshold");
+            
+            // Collect fills for this receipt (limited by max_fills_to_process)
+            let mut total_xrd = FungibleBucket::new(XRD);
+            let receipt_id_u64 = match receipt_id.clone() {
+                NonFungibleLocalId::Integer(i) => i.value(),
+                _ => panic!("Invalid NFT ID type")
+            };
+            
+            // Process fills for this receipt
             let start_key = CombinedKey::new(receipt_id_u64, 1, 0).key;
             let end_key = CombinedKey::new(receipt_id_u64, u32::MAX, 0).key;
             
-            let mut total_claimable = dec!(0);
-            let mut fills_checked = 0u64;
+            // Collect keys and data first, then process (limited by max_fills_to_process)
+            let mut fills_to_process = Vec::new();
+            let mut fills_collected = 0u64;
             
-            for (_, unstake_nft_or_lsu, _) in self.order_fill_tree.range(start_key..=end_key) {
-                if fills_checked >= max_fills {
+            for (key, value, _) in self.order_fill_tree.range(start_key..=end_key) {
+                if fills_collected >= max_fills_to_process {
                     break;
                 }
-                
+                fills_to_process.push((key, value.clone()));
+                fills_collected += 1;
+            }
+            
+            // Now process the fills
+            for (avl_key, unstake_nft_or_lsu) in fills_to_process {
                 match unstake_nft_or_lsu {
                     UnstakeNFTOrLSU::UnstakeNFT(unstake_nft_data) => {
-                        let nft_data: UnstakeData = NonFungibleResourceManager::from(unstake_nft_data.resource_address)
-                            .get_non_fungible_data(&unstake_nft_data.id);
+                        let local_id: NonFungibleLocalId = unstake_nft_data.id.clone();
                         
-                        // Check if past the unbonding period
+                        // Check if NFT is ready to claim
+                        let nft_data: UnstakeData = NonFungibleResourceManager::from(unstake_nft_data.resource_address)
+                            .get_non_fungible_data(&local_id);
                         let current_epoch = Runtime::current_epoch();
-                        if current_epoch >= nft_data.claim_epoch {
-                            total_claimable += nft_data.claim_amount;
+                        
+                        match current_epoch >= nft_data.claim_epoch {
+                            true => {
+                                // NFT is ready to claim
+                                let unstake_nft_vault = self.component_vaults.get(&unstake_nft_data.resource_address).unwrap();
+                                let unstake_nft = unstake_nft_vault.as_non_fungible().take_non_fungible(&local_id);
+                                let validator_address = self.get_validator_from_unstake_nft(&unstake_nft_data.resource_address);
+                                let mut validator: Global<Validator> = Global::from(validator_address);
+                                let claimed_xrd = validator.claim_xrd(unstake_nft);
+                                total_xrd.put(claimed_xrd);
+                            }
+                            false => {
+                                // NFT not ready yet, skip this fill
+                                continue;
+                            }
                         }
                     }
                     UnstakeNFTOrLSU::LSU(_) => {
-                        // LSUs are NOT claimable for XRD - they need to be collected first
+                        panic!("Cannot cycle LSU fills - receipt must have auto_unstake enabled");
                     }
                 }
                 
-                fills_checked += 1;
+                // Remove the processed fill
+                self.order_fill_tree.remove(&avl_key);
             }
             
-            total_claimable
-        }
-
-        fn calculate_claimable_xrd(&self, receipt_id: &NonFungibleLocalId) -> Decimal {
-            let receipt_id_u64 = match receipt_id {
-                NonFungibleLocalId::Integer(i) => i.value(),
-                _ => return dec!(0)
-            };
+            // Update KVS data
+            let mut kvs_data = self.liquidity_data.get_mut(&global_id).unwrap();
+            kvs_data.fills_to_collect = kvs_data.fills_to_collect.saturating_sub(fills_collected);
             
-            let start_key = CombinedKey::new(receipt_id_u64, 1, 0).key;
-            let end_key = CombinedKey::new(receipt_id_u64, u32::MAX, 0).key;
+            // Take automation fee
+            let fee_amount = self.automation_fee;
+            let automation_fee_bucket = total_xrd.take(fee_amount);
             
-            let mut total_claimable = dec!(0);
-            
-            for (_, unstake_nft_or_lsu, _) in self.order_fill_tree.range(start_key..=end_key) {
-                match unstake_nft_or_lsu {
-                    UnstakeNFTOrLSU::UnstakeNFT(unstake_nft_data) => {
-                        let nft_data: UnstakeData = NonFungibleResourceManager::from(unstake_nft_data.resource_address)
-                            .get_non_fungible_data(&unstake_nft_data.id);
-                        
-                        // Check if past the unbonding period
-                        let current_epoch = Runtime::current_epoch();
-                        if current_epoch >= nft_data.claim_epoch {
-                            total_claimable += nft_data.claim_amount;
-                        }
-                    }
-                    UnstakeNFTOrLSU::LSU(_) => {
-                        // LSUs are NOT claimable for XRD - they need to be collected first
-                    }
-                }
-            }
-            
-            total_claimable
-        }
-
-        /// Gets the claimable XRD amount for a liquidity position.
-        /// 
-        /// This method calculates how much XRD can be claimed from unstake NFTs that have passed their
-        /// unbonding period. It only counts NFTs where the claim epoch has been reached - LSU fills are
-        /// not counted as they need to be collected first. This is useful for checking if a position
-        /// meets the refill threshold for automation or for users to see their claimable amounts.
-        /// 
-        /// # Arguments
-        /// * `receipt_id`: The `NonFungibleLocalId` of the liquidity receipt to check
-        ///
-        /// # Returns
-        /// * A `Decimal` representing the total XRD amount claimable from matured unstake NFTs
-
-        pub fn get_claimable_xrd(&self, receipt_id: NonFungibleLocalId) -> Decimal {
-            self.calculate_claimable_xrd(&receipt_id)
-        }
-
-        /// Gets a range of entries from the buy list order book.
-        /// 
-        /// This method returns a paginated view of the AVL tree buy list, useful for off-chain indexing
-        /// or frontend displays. The buy list is ordered by discount (best first), then by epoch (oldest
-        /// first), then by liquidity ID. This allows external systems to reconstruct the order matching
-        /// priority without needing to query the entire tree at once.
-        /// 
-        /// # Arguments
-        /// * `start_index`: The `u64` index to start from in the iteration
-        /// * `count`: The `u64` maximum number of entries to return
-        ///
-        /// # Returns
-        /// * A `Vec<(u128, NonFungibleGlobalId)>` containing tuples of AVL tree keys and receipt global IDs
-        pub fn get_buy_list_range(&self, start_index: u64, count: u64) -> Vec<(u128, NonFungibleGlobalId)>{
-            let mut results = Vec::new();
-            let mut current_index = 0u64;
-            
-            // Iterate through the AVL tree
-            for (key, global_id, _) in self.buy_list.range(0..u128::MAX) {
-                // Skip entries until we reach start_index
-                if current_index < start_index {
-                    current_index += 1;
-                    continue;
-                }
-                
-                // Stop if we've collected enough entries
-                if results.len() >= count as usize {
+            // Find and remove from current position in AVL tree
+            let mut key_to_remove = None;
+            for (key, tree_global_id, _) in self.buy_list.range(0..u128::MAX) {
+                if tree_global_id == global_id {
+                    key_to_remove = Some(key);
                     break;
                 }
-                
-                // Add the actual key and global_id
-                results.push((key, global_id.clone()));
-                
-                current_index += 1;
             }
             
-            results
-        }
-
-        /// Gets a range of liquidity data entries.
-        /// 
-        /// This method returns paginated liquidity position data by iterating through sequential receipt IDs
-        /// starting from the given index. Useful for indexers or dashboards that need to display all active
-        /// liquidity positions with their current state including available/filled amounts and pending fills.
-        /// Note that receipt IDs start at 1, so start_index 0 will begin with receipt ID 1.
-        /// 
-        /// # Arguments
-        /// * `start_index`: The `u64` starting position (0-based, maps to receipt ID start_index + 1)
-        /// * `count`: The `u64` maximum number of entries to return
-        ///
-        /// # Returns
-        /// * A `Vec<(NonFungibleGlobalId, LiquidityData)>` containing receipt IDs and their associated data
-        pub fn get_liquidity_data_range(&self, start_index: u64, count: u64) -> Vec<(NonFungibleGlobalId, LiquidityData)> {
-            let mut results = Vec::new();
-            
-            // Since liquidity_data is keyed by NonFungibleGlobalId, we'll iterate through receipt IDs
-            // starting from start_index + 1 (since receipt counter starts at 1)
-            let start_id = start_index + 1;
-            let end_id = std::cmp::min(start_id + count, self.liquidity_receipt_counter);
-            
-            for id in start_id..end_id {
-                let local_id = NonFungibleLocalId::Integer(IntegerNonFungibleLocalId::new(id));
-                let global_id = NonFungibleGlobalId::new(self.liquidity_receipt.address(), local_id);
-                
-                // Check if this global_id exists in our KVS
-                if let Some(liquidity_data) = self.liquidity_data.get(&global_id) {
-                    results.push((global_id, liquidity_data.clone()));
-                }
+            if let Some(key) = key_to_remove {
+                self.buy_list.remove(&key);
             }
             
-            results
+            // Add remaining XRD back to liquidity
+            let xrd_to_add = total_xrd.amount();
+            
+            // Update KVS data
+            kvs_data.xrd_liquidity_available += xrd_to_add;
+            let current_epoch = Runtime::current_epoch().number() as u32;
+            kvs_data.last_added_epoch = current_epoch;
+            
+            // Create new key with current epoch
+            let discount_u64 = (discount * dec!(10000)).checked_floor().unwrap().to_string().parse::<u64>().unwrap();
+            let new_combined_key = CombinedKey::new(discount_u64, current_epoch, self.liquidity_receipt_counter);
+            self.liquidity_receipt_counter += 1;
+            
+            // Reinsert at new position
+            self.buy_list.insert(new_combined_key.key, global_id);
+            
+            // Update liquidity index
+            let index_usize = (discount / dec!(0.00025)).checked_floor().unwrap().to_string().parse::<usize>().unwrap();
+            self.liquidity_index[index_usize] += xrd_to_add;
+            
+            // Put XRD in vault
+            self.xrd_liquidity.as_fungible().put(total_xrd);
+            self.total_xrd_locked += xrd_to_add;
+            
+            // Emit the cycle event
+            Runtime::emit_event(LiquidityCycledEvent {
+                receipt_id,
+                xrd_amount_cycled: xrd_to_add,
+                automation_fee: fee_amount,
+            });
+            
+            // Return the automation fee to the caller
+            automation_fee_bucket
         }
 
-        /// Gets a range of automated liquidity positions.
-        /// 
-        /// This method returns paginated entries from the automated liquidity tracking index. Only positions
-        /// with auto_refill enabled are included. The index maintains insertion order and handles gaps when
-        /// positions disable automation. Useful for automation bots to identify which positions need cycling
-        /// based on their refill thresholds and claimable amounts.
-        /// 
-        /// # Arguments
-        /// * `start_index`: The `u64` index to start from (minimum 1)
-        /// * `count`: The `u64` maximum number of entries to return
-        ///
-        /// # Returns
-        /// * A `Vec<(u64, NonFungibleGlobalId)>` containing index positions and receipt global IDs
-        pub fn get_automated_liquidity_range(&self, start_index: u64, count: u64) -> Vec<(u64, NonFungibleGlobalId)> {
-            let mut results = Vec::new();
-            
-            // automated_liquidity is indexed from 1 to automated_liquidity_index - 1
-            let start = std::cmp::max(start_index, 1);
-            let end = std::cmp::min(start + count, self.automated_liquidity_index);
-            
-            for index in start..end {
-                if let Some(global_id) = self.automated_liquidity.get(&index) {
-                    results.push((index, global_id.clone()));
-                }
-            }
-            
-            results
-        }
 
-        /// Gets the current liquidity data for a specific receipt.
-        /// 
-        /// This method returns the mutable liquidity data stored in the key-value store for a given
-        /// receipt ID. This includes the current available liquidity, amount already filled, number
-        /// of fills pending collection, and the epoch when liquidity was last added. Useful for
-        /// frontends to display position details or for users to check their liquidity status.
-        /// 
-        /// # Arguments
-        /// * `receipt_id`: The `NonFungibleLocalId` of the liquidity receipt to query
-        ///
-        /// # Returns
-        /// * A `LiquidityData` struct containing the current state of the liquidity position
-        pub fn get_liquidity_data(&self, receipt_id: NonFungibleLocalId) -> LiquidityData {
-            let global_id = NonFungibleGlobalId::new(self.liquidity_receipt.address(), receipt_id);
-            self.liquidity_data.get(&global_id).unwrap().clone()
-        }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
         /// Removes liquidity and returns XRD to the provider.
         /// 
@@ -1689,6 +1498,213 @@ pub fn cycle_liquidity(&mut self, receipt_id: NonFungibleLocalId, max_fills_to_p
             }
             
             ready_receipts
+        }
+
+        fn calculate_limited_claimable_xrd(&self, receipt_id: &NonFungibleLocalId, max_fills: u64) -> Decimal {
+            let receipt_id_u64 = match receipt_id {
+                NonFungibleLocalId::Integer(i) => i.value(),
+                _ => return dec!(0)
+            };
+            
+            let start_key = CombinedKey::new(receipt_id_u64, 1, 0).key;
+            let end_key = CombinedKey::new(receipt_id_u64, u32::MAX, 0).key;
+            
+            let mut total_claimable = dec!(0);
+            let mut fills_checked = 0u64;
+            
+            for (_, unstake_nft_or_lsu, _) in self.order_fill_tree.range(start_key..=end_key) {
+                if fills_checked >= max_fills {
+                    break;
+                }
+                
+                match unstake_nft_or_lsu {
+                    UnstakeNFTOrLSU::UnstakeNFT(unstake_nft_data) => {
+                        let nft_data: UnstakeData = NonFungibleResourceManager::from(unstake_nft_data.resource_address)
+                            .get_non_fungible_data(&unstake_nft_data.id);
+                        
+                        // Check if past the unbonding period
+                        let current_epoch = Runtime::current_epoch();
+                        if current_epoch >= nft_data.claim_epoch {
+                            total_claimable += nft_data.claim_amount;
+                        }
+                    }
+                    UnstakeNFTOrLSU::LSU(_) => {
+                        // LSUs are NOT claimable for XRD - they need to be collected first
+                    }
+                }
+                
+                fills_checked += 1;
+            }
+            
+            total_claimable
+        }
+
+        fn calculate_claimable_xrd(&self, receipt_id: &NonFungibleLocalId) -> Decimal {
+            let receipt_id_u64 = match receipt_id {
+                NonFungibleLocalId::Integer(i) => i.value(),
+                _ => return dec!(0)
+            };
+            
+            let start_key = CombinedKey::new(receipt_id_u64, 1, 0).key;
+            let end_key = CombinedKey::new(receipt_id_u64, u32::MAX, 0).key;
+            
+            let mut total_claimable = dec!(0);
+            
+            for (_, unstake_nft_or_lsu, _) in self.order_fill_tree.range(start_key..=end_key) {
+                match unstake_nft_or_lsu {
+                    UnstakeNFTOrLSU::UnstakeNFT(unstake_nft_data) => {
+                        let nft_data: UnstakeData = NonFungibleResourceManager::from(unstake_nft_data.resource_address)
+                            .get_non_fungible_data(&unstake_nft_data.id);
+                        
+                        // Check if past the unbonding period
+                        let current_epoch = Runtime::current_epoch();
+                        if current_epoch >= nft_data.claim_epoch {
+                            total_claimable += nft_data.claim_amount;
+                        }
+                    }
+                    UnstakeNFTOrLSU::LSU(_) => {
+                        // LSUs are NOT claimable for XRD - they need to be collected first
+                    }
+                }
+            }
+            
+            total_claimable
+        }
+
+        /// Gets the claimable XRD amount for a liquidity position.
+        /// 
+        /// This method calculates how much XRD can be claimed from unstake NFTs that have passed their
+        /// unbonding period. It only counts NFTs where the claim epoch has been reached - LSU fills are
+        /// not counted as they need to be collected first. This is useful for checking if a position
+        /// meets the refill threshold for automation or for users to see their claimable amounts.
+        /// 
+        /// # Arguments
+        /// * `receipt_id`: The `NonFungibleLocalId` of the liquidity receipt to check
+        ///
+        /// # Returns
+        /// * A `Decimal` representing the total XRD amount claimable from matured unstake NFTs
+
+        pub fn get_claimable_xrd(&self, receipt_id: NonFungibleLocalId) -> Decimal {
+            self.calculate_claimable_xrd(&receipt_id)
+        }
+
+        /// Gets a range of entries from the buy list order book.
+        /// 
+        /// This method returns a paginated view of the AVL tree buy list, useful for off-chain indexing
+        /// or frontend displays. The buy list is ordered by discount (best first), then by epoch (oldest
+        /// first), then by liquidity ID. This allows external systems to reconstruct the order matching
+        /// priority without needing to query the entire tree at once.
+        /// 
+        /// # Arguments
+        /// * `start_index`: The `u64` index to start from in the iteration
+        /// * `count`: The `u64` maximum number of entries to return
+        ///
+        /// # Returns
+        /// * A `Vec<(u128, NonFungibleGlobalId)>` containing tuples of AVL tree keys and receipt global IDs
+        pub fn get_buy_list_range(&self, start_index: u64, count: u64) -> Vec<(u128, NonFungibleGlobalId)>{
+            let mut results = Vec::new();
+            let mut current_index = 0u64;
+            
+            // Iterate through the AVL tree
+            for (key, global_id, _) in self.buy_list.range(0..u128::MAX) {
+                // Skip entries until we reach start_index
+                if current_index < start_index {
+                    current_index += 1;
+                    continue;
+                }
+                
+                // Stop if we've collected enough entries
+                if results.len() >= count as usize {
+                    break;
+                }
+                
+                // Add the actual key and global_id
+                results.push((key, global_id.clone()));
+                
+                current_index += 1;
+            }
+            
+            results
+        }
+
+        /// Gets a range of liquidity data entries.
+        /// 
+        /// This method returns paginated liquidity position data by iterating through sequential receipt IDs
+        /// starting from the given index. Useful for indexers or dashboards that need to display all active
+        /// liquidity positions with their current state including available/filled amounts and pending fills.
+        /// Note that receipt IDs start at 1, so start_index 0 will begin with receipt ID 1.
+        /// 
+        /// # Arguments
+        /// * `start_index`: The `u64` starting position (0-based, maps to receipt ID start_index + 1)
+        /// * `count`: The `u64` maximum number of entries to return
+        ///
+        /// # Returns
+        /// * A `Vec<(NonFungibleGlobalId, LiquidityData)>` containing receipt IDs and their associated data
+        pub fn get_liquidity_data_range(&self, start_index: u64, count: u64) -> Vec<(NonFungibleGlobalId, LiquidityData)> {
+            let mut results = Vec::new();
+            
+            // Since liquidity_data is keyed by NonFungibleGlobalId, we'll iterate through receipt IDs
+            // starting from start_index + 1 (since receipt counter starts at 1)
+            let start_id = start_index + 1;
+            let end_id = std::cmp::min(start_id + count, self.liquidity_receipt_counter);
+            
+            for id in start_id..end_id {
+                let local_id = NonFungibleLocalId::Integer(IntegerNonFungibleLocalId::new(id));
+                let global_id = NonFungibleGlobalId::new(self.liquidity_receipt.address(), local_id);
+                
+                // Check if this global_id exists in our KVS
+                if let Some(liquidity_data) = self.liquidity_data.get(&global_id) {
+                    results.push((global_id, liquidity_data.clone()));
+                }
+            }
+            
+            results
+        }
+
+        /// Gets a range of automated liquidity positions.
+        /// 
+        /// This method returns paginated entries from the automated liquidity tracking index. Only positions
+        /// with auto_refill enabled are included. The index maintains insertion order and handles gaps when
+        /// positions disable automation. Useful for automation bots to identify which positions need cycling
+        /// based on their refill thresholds and claimable amounts.
+        /// 
+        /// # Arguments
+        /// * `start_index`: The `u64` index to start from (minimum 1)
+        /// * `count`: The `u64` maximum number of entries to return
+        ///
+        /// # Returns
+        /// * A `Vec<(u64, NonFungibleGlobalId)>` containing index positions and receipt global IDs
+        pub fn get_automated_liquidity_range(&self, start_index: u64, count: u64) -> Vec<(u64, NonFungibleGlobalId)> {
+            let mut results = Vec::new();
+            
+            // automated_liquidity is indexed from 1 to automated_liquidity_index - 1
+            let start = std::cmp::max(start_index, 1);
+            let end = std::cmp::min(start + count, self.automated_liquidity_index);
+            
+            for index in start..end {
+                if let Some(global_id) = self.automated_liquidity.get(&index) {
+                    results.push((index, global_id.clone()));
+                }
+            }
+            
+            results
+        }
+
+        /// Gets the current liquidity data for a specific receipt.
+        /// 
+        /// This method returns the mutable liquidity data stored in the key-value store for a given
+        /// receipt ID. This includes the current available liquidity, amount already filled, number
+        /// of fills pending collection, and the epoch when liquidity was last added. Useful for
+        /// frontends to display position details or for users to check their liquidity status.
+        /// 
+        /// # Arguments
+        /// * `receipt_id`: The `NonFungibleLocalId` of the liquidity receipt to query
+        ///
+        /// # Returns
+        /// * A `LiquidityData` struct containing the current state of the liquidity position
+        pub fn get_liquidity_data(&self, receipt_id: NonFungibleLocalId) -> LiquidityData {
+            let global_id = NonFungibleGlobalId::new(self.liquidity_receipt.address(), receipt_id);
+            self.liquidity_data.get(&global_id).unwrap().clone()
         }
 
     }

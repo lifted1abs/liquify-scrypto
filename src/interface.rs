@@ -148,7 +148,7 @@ mod interface_module {
             liquify_component.update_automation(receipt_bucket, auto_refill, refill_threshold)
         }
 
-        pub fn cycle_liquidity(&mut self, receipt_id: NonFungibleLocalId, max_fills_to_process: u64) -> Bucket {
+        pub fn cycle_liquidity(&mut self, receipt_id: NonFungibleLocalId, max_fills_to_process: u64) -> FungibleBucket {
             let liquify_component: Global<Liquify> = self.active_liquify_component.unwrap().into();
             
             liquify_component.cycle_liquidity(receipt_id, max_fills_to_process)
