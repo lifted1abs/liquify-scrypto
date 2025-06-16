@@ -104,42 +104,6 @@ async def check_dev_address_receipts(spammer_info: SpammerInfo):
     
     print(f"✗ No liquidity receipts found at {DEV_ADDRESS}")
 
-async def check_account_balance(spammer_info: SpammerInfo, account_address: str):
-    """Check XRD balance of an account"""
-    balance_result = await perform_request(
-        spammer_info,
-        "/state/entity/details",
-        json.dumps({
-            "addresses": [account_address],
-            "aggregation_level": "Vault"
-        })
-    )
-    
-    xrd_balance = 0
-    if "items" in balance_result and len(balance_result["items"]) > 0:
-        if "fungible_resources" in balance_result["items"][0]:
-            # Check if fungible_resources has an "items" key
-            fungible_resources = balance_result["items"][0]["fungible_resources"]
-            
-            # Handle both direct array and nested items structure
-            resources_list = fungible_resources
-            if isinstance(fungible_resources, dict) and "items" in fungible_resources:
-                resources_list = fungible_resources["items"]
-            
-            for resource in resources_list:
-                if resource["resource_address"] == "resource_tdx_2_1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxtfd2jc":
-                    # Handle different possible keys for amount
-                    if "amount" in resource:
-                        xrd_balance = float(resource["amount"])
-                    elif "vaults" in resource and "items" in resource["vaults"]:
-                        # Sum up all vault amounts
-                        for vault in resource["vaults"]["items"]:
-                            if "amount" in vault:
-                                xrd_balance += float(vault["amount"])
-                    break
-    
-    return xrd_balance
-
 async def main():
     print("This process has the PID", os.getpid())
 
@@ -168,7 +132,7 @@ async def main():
     print(f"Using LIQUIFY_LIQUIDITY_RECEIPT: {config.get('LIQUIFY_LIQUIDITY_RECEIPT', 'Not found')}")
 
     # Check what we should do
-    choice = int(input("Choose:\n1) Get funds from faucet\n2) Spam liquidity\n3) Spam unstakes\n4) Collect fills\n5) Check DEV_ADDRESS receipts\n"))
+    choice = int(input("Choose:\n1) Get funds from faucet\n2) Spam liquidity\n3) Spam unstakes\n4) Check DEV_ADDRESS receipts\n"))
 
     # Get funds
     if choice == 1:
@@ -242,18 +206,8 @@ async def main():
             print("Exiting now.")
             exit()     
 
-    # Collect fills
-    if choice == 4:
-        start_collecting_question = input("\n!! Double-check your input !!\n\nStart collecting fills? y/n: ")
-    
-        if (start_collecting_question.lower() == "y"):
-            await start_collecting_fills(spammer_info)
-        else:
-            print("Exiting now.")
-            exit()
-
     # Check DEV_ADDRESS receipts
-    if choice == 5:
+    if choice == 4:
         await check_dev_address_receipts(spammer_info)
 
 #
@@ -279,15 +233,12 @@ async def start_getting_funds(spammer_info: SpammerInfo, account) -> None:
         )
 
         # submit tx
-        result = await submit_transaction(
+        await submit_transaction(
             tx,
             spammer_info
         )
 
-        if result["status"] in ["CommittedSuccess", "committed_success"]:
-            print(f"✓ Got funds {i + 1} times")
-        else:
-            print(f"✗ Failed to get funds: {result['status']}")
+        print(f"Got funds {i + 1} times")
 
         await asyncio.sleep(0.5)    
 
@@ -295,23 +246,14 @@ async def start_spamming_liquidity(spammer_info: SpammerInfo, amount_spammed = 0
     spammer_info.current_epoch = await get_current_epoch(spammer_info)
 
     print(f"Start spamming assuming {amount_spammed} XRD in liquidity already provided...")
+    print("IMPORTANT: All transactions will use auto_unstake=true, auto_refill=true, threshold=10000")
     
     # Debug output for the set amount
     if set_amount is not None:
-        if set_amount < 10000:
-            print(f"WARNING: Set amount ({set_amount} XRD) is below the minimum liquidity requirement of 10,000 XRD.")
-            use_anyway = input("Use this amount anyway? This might result in failed transactions. (y/n): ")
-            if use_anyway.lower() != 'y':
-                print("Please restart the script with a higher amount.")
-                exit()
         print(f"Using fixed amount of {set_amount} XRD for each transaction")
     else:
         print("Using random amounts between 10,000 and 100,000 XRD")
 
-    transaction_count = 0
-    successful_transactions = 0
-    failed_transactions = 0
-    
     while amount_spammed < 100_000_000:
         # Build manifest
         discount = random.randrange(500, 1_500, 25) # 0.5-1.5% with steps of 0.025%
@@ -322,34 +264,19 @@ async def start_spamming_liquidity(spammer_info: SpammerInfo, amount_spammed = 0
         else:
             amount = random.randrange(10_000, 100_000) # 10k - 100k
             
-        auto_unstake = random.choice([True, False])  # Randomly test both modes
+        # ALWAYS use these values
+        auto_unstake = True
+        auto_refill = True
+        refill_threshold = 10000
 
         # Get Liquify component and receipt from config
         liquify_component = spammer_info.config.get('LIQUIFY_COMPONENT', '')
         liquidity_receipt = spammer_info.config.get('LIQUIFY_LIQUIDITY_RECEIPT', '')
 
-        # Check account balance before transaction
-        xrd_balance = await check_account_balance(spammer_info, spammer_info.account.as_str())
+        # Debug output before building manifest
+        print(f"Preparing to add {amount} XRD with {discount/1000:.3f}% discount, auto_unstake=true, auto_refill=true, threshold=10000")
         
-        # INCREMENT transaction_count HERE before printing
-        transaction_count += 1
-        
-        print(f"\n=== Transaction {transaction_count} ===")
-        print(f"Current XRD balance: {xrd_balance}")
-        print(f"Amount to provide: {amount} XRD")
-        print(f"Discount: {discount/1000:.3f}%")
-        print(f"Auto-unstake: {auto_unstake}")
-        
-        if xrd_balance < amount + 100:  # Include fee buffer
-            print(f"⚠️ WARNING: Insufficient XRD balance! Getting more from faucet...")
-            # Get more funds
-            manifest = await build_faucet_manifest(spammer_info, spammer_info.account.as_str())
-            tx = await build_and_sign_transaction(manifest, spammer_info)
-            await submit_transaction(tx, spammer_info)
-            await asyncio.sleep(2)
-            continue
-        
-        # Create the manifest - Updated with new parameters
+        # Create the manifest with fixed parameters
         manifest_string = f"""
         CALL_METHOD
             Address("component_tdx_2_1cptxxxxxxxxxfaucetxxxxxxxxx000527798379xxxxxxxxxyulkzl")
@@ -371,7 +298,7 @@ async def start_spamming_liquidity(spammer_info: SpammerInfo, amount_spammed = 0
             "add_liquidity"
             Bucket("xrd_bucket")
             Decimal("0.{discount:05}")
-            {str(auto_unstake).lower()}
+            true
             true
             Decimal("10000")
         ;
@@ -408,50 +335,27 @@ async def start_spamming_liquidity(spammer_info: SpammerInfo, amount_spammed = 0
                 spammer_info
             )
 
-            print(f"Submitting transaction: {signed_transaction.intent_hash().as_str()}")
+            print(f"{get_timestamp()}: {signed_transaction.intent_hash().as_str()} - Using account {spammer_info.account.as_str()} to provide {amount} XRD of liquidity with a discount of {discount / 1000}%, auto_unstake=true, auto_refill=true. Receipt will be sent to {DEV_ADDRESS}")
             
-            # Submit transaction and check result
-            result = await submit_transaction(
+            # Submit transaction
+            await submit_transaction(
                 signed_transaction,
                 spammer_info
             )
-            
-            # Check transaction status
-            if result["status"] in ["CommittedSuccess", "committed_success"]:
-                print(f"✓ SUCCESS: Transaction committed successfully!")
-                print(f"  Receipt sent to: {DEV_ADDRESS}")
-                amount_spammed += amount
-                successful_transactions += 1
-            elif result["status"] == "duplicate":
-                print(f"⚠ DUPLICATE: Transaction already submitted")
-                failed_transactions += 1
-            else:
-                print(f"✗ FAILED: Transaction status: {result['status']}")
-                print(f"  Full result: {json.dumps(result, indent=2)}")
-                failed_transactions += 1
-                
-                # Check for specific errors
-                if "result" in result and "error" in str(result["result"]).lower():
-                    print(f"  Error details: {result['result']}")
 
-            print(f"Running total - Success: {successful_transactions}, Failed: {failed_transactions}")
+            # Increment the total amount spammed so we eventually reach our stop
+            amount_spammed += amount
             print(f"Total amount spammed: {amount_spammed} XRD")
 
         except Exception as e:
-            print(f"❌ ERROR during transaction: {str(e)}")
-            print(f"Exception type: {type(e).__name__}")
-            import traceback
-            traceback.print_exc()
-            failed_transactions += 1
-            
-            # Wait longer before retrying after an error
+            print(f"Error during transaction: {str(e)}")
+            print("Waiting 5 seconds before trying again...")
             await asyncio.sleep(5)
             continue
 
         await asyncio.sleep(0.5)
 
-    print(f"\nDone spamming after {transaction_count} transactions")
-    print(f"Final stats - Success: {successful_transactions}, Failed: {failed_transactions}")
+    print(f"Done spamming")
     
     # Check receipts at DEV_ADDRESS
     await check_dev_address_receipts(spammer_info)
@@ -465,10 +369,6 @@ async def start_spamming_unstakes(spammer_info: SpammerInfo, amount_spammed = 0,
 
     print(f"Start spamming assuming {amount_spammed} XRD already unstaked...")
 
-    transaction_count = 0
-    successful_transactions = 0
-    failed_transactions = 0
-
     while amount_spammed < 105_000_000:
         # Build manifest
         # Use set_amount if provided, otherwise generate random amount
@@ -479,107 +379,33 @@ async def start_spamming_unstakes(spammer_info: SpammerInfo, amount_spammed = 0,
         else:
             amount = random.randrange(100_000, 500_000) # Default: 100k - 500k
 
-        # INCREMENT transaction_count HERE
-        transaction_count += 1
+        manifest = await build_unstake_manifest(
+            spammer_info,
+            amount
+        )
+        
+        # Build and sign transaction
+        signed_transaction = await build_and_sign_transaction(
+            manifest,
+            spammer_info
+        )
 
-        try:
-            manifest = await build_unstake_manifest(
-                spammer_info,
-                amount
-            )
-            
-            # Build and sign transaction
-            signed_transaction = await build_and_sign_transaction(
-                manifest,
-                spammer_info
-            )
+        print(f"{get_timestamp()}: {signed_transaction.intent_hash().as_str()} - Using account {spammer_info.account.as_str()} to unstake {amount} XRD worth of LSUs.")
+        
+        # Submit transaction
+        await submit_transaction(
+            signed_transaction,
+            spammer_info
+        )
 
-            print(f"\n{get_timestamp()}: Transaction {transaction_count}")
-            print(f"Submitting {signed_transaction.intent_hash().as_str()}")
-            print(f"Unstaking {amount:,} XRD worth of LSUs")
-            
-            # Submit transaction
-            result = await submit_transaction(
-                signed_transaction,
-                spammer_info
-            )
-            
-            # Check transaction status
-            if result["status"] in ["CommittedSuccess", "committed_success"]:
-                print(f"✓ SUCCESS: Transaction committed successfully!")
-                amount_spammed += amount
-                successful_transactions += 1
-                print(f"Total amount unstaked: {amount_spammed:,} XRD worth of LSUs.")
-            else:
-                print(f"✗ FAILED: Transaction status: {result['status']}")
-                failed_transactions += 1
-
-            print(f"Running total - Success: {successful_transactions}, Failed: {failed_transactions}")
-
-        except Exception as e:
-            print(f"❌ ERROR during transaction: {str(e)}")
-            failed_transactions += 1
-            await asyncio.sleep(5)
-            continue
+        # Increment the total amount spammed so we eventually reach our stop
+        amount_spammed += amount
+        print(f"Total amount unstaked: {amount_spammed} XRD worth of LSUs.")
 
         await asyncio.sleep(0.5)
 
-    print(f"\nDone spamming")
-    print(f"Final stats - Success: {successful_transactions}, Failed: {failed_transactions}")
+    print(f"Done spamming")
     exit()    
-
-#
-# Collect fills from liquidity receipts
-#
-async def start_collecting_fills(spammer_info: SpammerInfo) -> None:
-    spammer_info.current_epoch = await get_current_epoch(spammer_info)
-
-    print("Collecting fills...")
-
-    successful_collections = 0
-    failed_collections = 0
-
-    # Run for 100 iterations
-    for i in range(100):
-        try:
-            # Build manifest
-            manifest = await build_collect_fills_manifest(spammer_info)
-            
-            # Build and sign transaction
-            signed_transaction = await build_and_sign_transaction(
-                manifest,
-                spammer_info
-            )
-
-            print(f"\n{get_timestamp()}: Submitting {signed_transaction.intent_hash().as_str()}")
-            print(f"Collection iteration {i + 1}")
-            
-            # Submit transaction
-            result = await submit_transaction(
-                signed_transaction,
-                spammer_info
-            )
-            
-            # Check transaction status
-            if result["status"] in ["CommittedSuccess", "committed_success"]:
-                print(f"✓ SUCCESS: Fills collected successfully!")
-                successful_collections += 1
-            else:
-                print(f"✗ FAILED: Collection failed - {result['status']}")
-                failed_collections += 1
-
-            print(f"Running total - Success: {successful_collections}, Failed: {failed_collections}")
-
-        except Exception as e:
-            print(f"❌ ERROR during collection: {str(e)}")
-            failed_collections += 1
-            await asyncio.sleep(5)
-            continue
-
-        await asyncio.sleep(0.5)
-
-    print(f"\nDone collecting fills")
-    print(f"Final stats - Success: {successful_collections}, Failed: {failed_collections}")
 
 #
 # Returns the current epoch
@@ -594,7 +420,7 @@ async def get_current_epoch(spammer_info: SpammerInfo):
     return result["ledger_state"]["epoch"]
 
 #
-# Submits a signed transaction to the network with status checking
+# Submits a signed transaction to the network
 #
 async def submit_transaction(signed_transaction: SignedIntent, spammer_info: SpammerInfo):
     result = await perform_request(
@@ -606,35 +432,8 @@ async def submit_transaction(signed_transaction: SignedIntent, spammer_info: Spa
             }
         )
     )
-    
-    # Check if submission was successful
-    if "duplicate" in str(result).lower():
-        print(f"Transaction rejected as duplicate")
-        return {"status": "duplicate", "result": result}
-    
-    # Get transaction status after a short delay
-    await asyncio.sleep(1)  # Give it time to process
-    
-    intent_hash = signed_transaction.intent_hash().as_str()
-    status_result = await perform_request(
-        spammer_info,
-        "/transaction/status",
-        json.dumps(
-            {
-                "intent_hash": intent_hash
-            }
-        )
-    )
-    
-    # Get the actual status from the response
-    intent_status = "unknown"
-    if isinstance(status_result, dict):
-        if "intent_status" in status_result:
-            intent_status = status_result["intent_status"]
-        elif "status" in status_result:
-            intent_status = status_result["status"]
-    
-    return {"status": intent_status, "result": result, "intent_hash": intent_hash}
+
+    return result
 
 #
 #  Generically performs a request to the Gateway API endpoint and returns the JSON
@@ -679,53 +478,6 @@ async def build_faucet_manifest(spammer_info: SpammerInfo, account):
     return manifest 
 
 #
-# Returns a validated transaction manifest that adds liquidity to Liquify
-#
-async def build_liquidity_manifest(spammer_info: SpammerInfo, amount, discount, auto_unstake):
-    # Get Liquify component from config
-    liquify_component = spammer_info.config.get('LIQUIFY_COMPONENT', '')
-    
-    manifest_string: str = f"""
-    CALL_METHOD
-        Address("component_tdx_2_1cptxxxxxxxxxfaucetxxxxxxxxx000527798379xxxxxxxxxyulkzl")
-        "lock_fee"
-        Decimal("100")
-    ;
-    CALL_METHOD
-        Address("{spammer_info.account.as_str()}")
-        "withdraw"
-        Address("resource_tdx_2_1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxtfd2jc")
-        Decimal("{amount}")
-    ;
-    TAKE_ALL_FROM_WORKTOP
-        Address("resource_tdx_2_1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxtfd2jc")
-        Bucket("xrd_bucket")
-    ;
-    CALL_METHOD
-        Address("{liquify_component}")
-        "add_liquidity"
-        Bucket("xrd_bucket")
-        Decimal("0.{discount:05}")
-        {str(auto_unstake).lower()}
-        true
-        Decimal("10000")
-    ;
-    CALL_METHOD
-        Address("{spammer_info.account.as_str()}")
-        "deposit_batch"
-        Expression("ENTIRE_WORKTOP")
-    ;
-    """
-
-    manifest: TransactionManifest = TransactionManifest(
-        Instructions.from_string(manifest_string, spammer_info.network_number),
-        []
-    )
-    manifest.statically_validate()
-
-    return manifest
-
-#
 # Returns a validated transaction manifest that unstakes via Liquify
 #
 async def build_unstake_manifest(spammer_info: SpammerInfo, amount):
@@ -765,54 +517,6 @@ async def build_unstake_manifest(spammer_info: SpammerInfo, amount):
         "liquify_unstake"
         Bucket("lsu_bucket")
         {max_iterations}u8
-    ;
-    CALL_METHOD
-        Address("{spammer_info.account.as_str()}")
-        "deposit_batch"
-        Expression("ENTIRE_WORKTOP")
-    ;
-    """
-
-    manifest: TransactionManifest = TransactionManifest(
-        Instructions.from_string(manifest_string, spammer_info.network_number),
-        []
-    )
-    manifest.statically_validate()
-
-    return manifest
-
-#
-# Returns a validated transaction manifest that collects fills from liquidity receipts
-#
-async def build_collect_fills_manifest(spammer_info: SpammerInfo):
-    # Get Liquify component and receipt from config
-    liquify_component = spammer_info.config.get('LIQUIFY_COMPONENT', '')
-    liquidity_receipt = spammer_info.config.get('LIQUIFY_LIQUIDITY_RECEIPT', '')
-    
-    # Hardcode number of fills to 50
-    number_of_fills = 50
-    
-    manifest_string: str = f"""
-    CALL_METHOD
-        Address("component_tdx_2_1cptxxxxxxxxxfaucetxxxxxxxxx000527798379xxxxxxxxxyulkzl")
-        "lock_fee"
-        Decimal("100")
-    ;
-    CALL_METHOD
-        Address("{spammer_info.account.as_str()}")
-        "withdraw"
-        Address("{liquidity_receipt}")
-        Decimal("1")
-    ;
-    TAKE_ALL_FROM_WORKTOP
-        Address("{liquidity_receipt}")
-        Bucket("receipt_bucket")
-    ;
-    CALL_METHOD
-        Address("{liquify_component}")
-        "collect_fills"
-        Bucket("receipt_bucket")
-        {number_of_fills}u64
     ;
     CALL_METHOD
         Address("{spammer_info.account.as_str()}")
