@@ -695,8 +695,8 @@ mod liquify_module {
                         // Get validator and claim
                         let validator_address = self.get_validator_from_unstake_nft(&unstake_nft_data.resource_address);
                         let mut validator: Global<Validator> = Global::from(validator_address);
-                        let claimed_xrd = validator.claim_xrd(unstake_nft.into());
-                        total_xrd.put(claimed_xrd.into());
+                        let claimed_xrd = validator.claim_xrd(unstake_nft).into();
+                        total_xrd.put(claimed_xrd);
                     }
                     UnstakeNFTOrLSU::LSU(_) => {
                         panic!("Cannot cycle LSU fills - receipt must have auto_unstake enabled");
