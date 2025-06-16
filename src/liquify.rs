@@ -642,7 +642,7 @@ mod liquify_module {
         /// # Returns
         /// * A `Bucket` containing the automation fee amount in XRD as payment to the caller
 
-pub fn cycle_liquidity(&mut self, receipt_id: NonFungibleLocalId, max_fills_to_process: u64) -> Bucket {
+pub fn cycle_liquidity(&mut self, receipt_id: NonFungibleLocalId, max_fills_to_process: u64) -> FungibleBucket {
     let nft_data: LiquidityReceipt = self.liquidity_receipt.get_non_fungible_data(&receipt_id);
     let global_id = NonFungibleGlobalId::new(self.liquidity_receipt.address(), receipt_id.clone());
     
@@ -661,7 +661,7 @@ pub fn cycle_liquidity(&mut self, receipt_id: NonFungibleLocalId, max_fills_to_p
     assert!(claimable_xrd >= refill_threshold, "Not enough claimable XRD to meet threshold");
     
     // Collect fills for this receipt (limited by max_fills_to_process)
-    let mut total_xrd = Bucket::new(XRD);
+    let mut total_xrd = FungibleBucket::new(XRD);
     let receipt_id_u64 = match receipt_id.clone() {
         NonFungibleLocalId::Integer(i) => i.value(),
         _ => panic!("Invalid NFT ID type")
@@ -701,7 +701,7 @@ pub fn cycle_liquidity(&mut self, receipt_id: NonFungibleLocalId, max_fills_to_p
                         let unstake_nft = unstake_nft_vault.as_non_fungible().take_non_fungible(&local_id);
                         let validator_address = self.get_validator_from_unstake_nft(&unstake_nft_data.resource_address);
                         let mut validator: Global<Validator> = Global::from(validator_address);
-                        let claimed_xrd = validator.claim_xrd(unstake_nft).into();
+                        let claimed_xrd = validator.claim_xrd(unstake_nft);
                         total_xrd.put(claimed_xrd);
                     }
                     false => {
@@ -761,7 +761,7 @@ pub fn cycle_liquidity(&mut self, receipt_id: NonFungibleLocalId, max_fills_to_p
     self.liquidity_index[index_usize] += xrd_to_add;
     
     // Put XRD in vault
-    self.xrd_liquidity.put(total_xrd);
+    self.xrd_liquidity.as_fungible().put(total_xrd);
     self.total_xrd_locked += xrd_to_add;
     
     // Emit the cycle event
