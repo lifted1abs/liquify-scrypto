@@ -655,6 +655,7 @@ mod liquify_module {
         /// # Returns
         /// * A `Bucket` containing the automation fee amount in XRD as payment to the caller
 
+        
         pub fn cycle_liquidity(&mut self, receipt_id: NonFungibleLocalId, max_fills_to_process: u64) -> FungibleBucket {
             let nft_data: LiquidityReceipt = self.liquidity_receipt.get_non_fungible_data(&receipt_id);
             let global_id = NonFungibleGlobalId::new(self.liquidity_receipt.address(), receipt_id.clone());
