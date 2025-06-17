@@ -25,13 +25,13 @@ pub struct ReceiptDetailData {
     pub claimable_xrd: Decimal,
 }
 
-// 2. Automation Ready Receipts Getter
 #[derive(ScryptoSbor, Debug, Clone)]
 pub struct AutomationReadyReceipt {
     pub receipt_id: NonFungibleLocalId,
+    pub discount: Decimal,
+    pub total_filled: Decimal, 
     pub claimable_xrd: Decimal,
     pub refill_threshold: Decimal,
-    pub xrd_after_fee: Decimal,
 }
 
 // NFT - Data that doesn't change during fills
@@ -1350,13 +1350,6 @@ mod liquify_module {
             self.receipt_image_url = Url::of(url);
         }
 
-        fn ensure_user_vault_exists(&mut self, resource: ResourceAddress) {
-            if !self.component_vaults.get(&resource).is_some() {
-                let new_vault = Vault::new(resource);
-                self.component_vaults.insert(resource, new_vault);
-            }
-        }
-
         fn get_validator_from_lsu(&self, lsu_address: ResourceAddress) -> Global<Validator> {
             let metadata: GlobalAddress = ResourceManager::from(lsu_address)
                 .get_metadata("validator")
@@ -1391,149 +1384,106 @@ mod liquify_module {
             is_valid
         }
 
-
-
-
-
-
-
-
-pub fn get_receipt_detail(&self, receipt_id: NonFungibleLocalId) -> ReceiptDetailData {
-    let nft_data: LiquidityReceipt = self.liquidity_receipt.get_non_fungible_data(&receipt_id);
-    let global_id = NonFungibleGlobalId::new(self.liquidity_receipt.address(), receipt_id.clone());
-    
-    // Get claimable XRD amount (ignore fill count for this method)
-    let (claimable_xrd, _) = self.calculate_claimable_xrd(&receipt_id);
-    
-    let (xrd_liquidity_available, xrd_liquidity_filled, fills_to_collect, last_added_epoch) = 
-        match self.liquidity_data.get(&global_id) {
-            Some(kvs_data) => (
-                kvs_data.xrd_liquidity_available,
-                kvs_data.xrd_liquidity_filled,
-                kvs_data.fills_to_collect,
-                kvs_data.last_added_epoch,
-            ),
-            None => (dec!(0), dec!(0), 0, 0)
-        };
-    
-    ReceiptDetailData {
-        receipt_id,
-        discount: nft_data.discount,
-        auto_unstake: nft_data.auto_unstake,
-        auto_refill: nft_data.auto_refill,
-        refill_threshold: nft_data.refill_threshold,
-        xrd_liquidity_available,
-        xrd_liquidity_filled,
-        fills_to_collect,
-        last_added_epoch,
-        claimable_xrd,
-    }
-}
-
-pub fn get_automation_ready_receipts(&self) -> Vec<AutomationReadyReceipt> {
-    let mut ready_receipts = Vec::new();
-    
-    // Iterate through automated_liquidity KVS
-    for i in 1..self.automated_liquidity_index {
-        if let Some(global_id) = self.automated_liquidity.get(&i) {
-            let receipt_id = global_id.local_id().clone();
+        pub fn get_receipt_detail(&self, receipt_id: NonFungibleLocalId) -> ReceiptDetailData {
             let nft_data: LiquidityReceipt = self.liquidity_receipt.get_non_fungible_data(&receipt_id);
+            let global_id = NonFungibleGlobalId::new(self.liquidity_receipt.address(), receipt_id.clone());
             
-            // Calculate claimable XRD (ignore fill count for this method)
+            // Get claimable XRD amount (ignore fill count for this method)
             let (claimable_xrd, _) = self.calculate_claimable_xrd(&receipt_id);
             
-            // Only include if claimable meets or exceeds threshold
-            if claimable_xrd >= nft_data.refill_threshold {
-                let xrd_after_fee = claimable_xrd - self.automation_fee;
-                
-                ready_receipts.push(AutomationReadyReceipt {
-                    receipt_id,
-                    claimable_xrd,
-                    refill_threshold: nft_data.refill_threshold,
-                    xrd_after_fee,
-                });
+            let (xrd_liquidity_available, xrd_liquidity_filled, fills_to_collect, last_added_epoch) = 
+                match self.liquidity_data.get(&global_id) {
+                    Some(kvs_data) => (
+                        kvs_data.xrd_liquidity_available,
+                        kvs_data.xrd_liquidity_filled,
+                        kvs_data.fills_to_collect,
+                        kvs_data.last_added_epoch,
+                    ),
+                    None => (dec!(0), dec!(0), 0, 0)
+                };
+            
+            ReceiptDetailData {
+                receipt_id,
+                discount: nft_data.discount,
+                auto_unstake: nft_data.auto_unstake,
+                auto_refill: nft_data.auto_refill,
+                refill_threshold: nft_data.refill_threshold,
+                xrd_liquidity_available,
+                xrd_liquidity_filled,
+                fills_to_collect,
+                last_added_epoch,
+                claimable_xrd,
             }
         }
-    }
-    
-    ready_receipts
-}
 
-/// Calculates the total claimable XRD and number of fills for a receipt
-/// Returns (claimable_xrd, fill_count) - only counts unstake NFTs that are past unbonding
-fn calculate_claimable_xrd(&self, receipt_id: &NonFungibleLocalId) -> (Decimal, u64) {
-    let receipt_id_u64 = match receipt_id {
-        NonFungibleLocalId::Integer(i) => i.value(),
-        _ => return (dec!(0), 0),
-    };
-    
-    let start_key = CombinedKey::new(receipt_id_u64, 1, 0).key;
-    let end_key = CombinedKey::new(receipt_id_u64, u32::MAX, 0).key;
-    
-    let mut total_claimable = dec!(0);
-    let mut fill_count = 0u64;
-    
-    for (_, unstake_nft_or_lsu, _) in self.order_fill_tree.range(start_key..=end_key) {
-        match unstake_nft_or_lsu {
-            UnstakeNFTOrLSU::UnstakeNFT(unstake_nft_data) => {
-                let nft_data: UnstakeData = NonFungibleResourceManager::from(unstake_nft_data.resource_address)
-                    .get_non_fungible_data(&unstake_nft_data.id);
-                
-                // Check if past the unbonding period
-                let current_epoch = Runtime::current_epoch();
-                if current_epoch >= nft_data.claim_epoch {
-                    total_claimable += nft_data.claim_amount;
+        pub fn get_automation_ready_receipts(&self) -> Vec<AutomationReadyReceipt> {
+            let mut ready_receipts = Vec::new();
+            
+            // Iterate through automated_liquidity KVS
+            for i in 1..self.automated_liquidity_index {
+                if let Some(global_id) = self.automated_liquidity.get(&i) {
+                    let receipt_id = global_id.local_id().clone();
+                    let nft_data: LiquidityReceipt = self.liquidity_receipt.get_non_fungible_data(&receipt_id);
+                    
+                    // Calculate claimable XRD (ignore fill count for this method)
+                    let (claimable_xrd, _) = self.calculate_claimable_xrd(&receipt_id);
+                    
+                    // Only include if claimable meets or exceeds threshold
+                    if claimable_xrd >= nft_data.refill_threshold {
+                        // Get the KVS data for total filled
+                        let kvs_data = self.liquidity_data.get(&global_id);
+                        let total_filled = kvs_data.map(|data| data.xrd_liquidity_filled).unwrap_or(dec!(0));
+                        
+                        ready_receipts.push(AutomationReadyReceipt {
+                            receipt_id,
+                            discount: nft_data.discount,
+                            total_filled,
+                            claimable_xrd,
+                            refill_threshold: nft_data.refill_threshold,
+                        });
+                    }
                 }
             }
-            UnstakeNFTOrLSU::LSU(_) => {
-                // Skip LSUs - they cannot be claimed for XRD instantly
-            }
+            
+            ready_receipts
         }
-        fill_count += 1;
-    }
-    
-    (total_claimable, fill_count)
-}
 
-/// Update the existing calculate_limited_claimable_xrd to return tuple
-fn calculate_limited_claimable_xrd(&self, receipt_id: &NonFungibleLocalId, max_fills: u64) -> (Decimal, u64) {
-    let receipt_id_u64 = match receipt_id {
-        NonFungibleLocalId::Integer(i) => i.value(),
-        _ => return (dec!(0), 0)
-    };
-    
-    let start_key = CombinedKey::new(receipt_id_u64, 1, 0).key;
-    let end_key = CombinedKey::new(receipt_id_u64, u32::MAX, 0).key;
-    
-    let mut total_claimable = dec!(0);
-    let mut fills_checked = 0u64;
-    
-    for (_, unstake_nft_or_lsu, _) in self.order_fill_tree.range(start_key..=end_key) {
-        if fills_checked >= max_fills {
-            break;
-        }
-        
-        match unstake_nft_or_lsu {
-            UnstakeNFTOrLSU::UnstakeNFT(unstake_nft_data) => {
-                let nft_data: UnstakeData = NonFungibleResourceManager::from(unstake_nft_data.resource_address)
-                    .get_non_fungible_data(&unstake_nft_data.id);
-                
-                // Check if past the unbonding period
-                let current_epoch = Runtime::current_epoch();
-                if current_epoch >= nft_data.claim_epoch {
-                    total_claimable += nft_data.claim_amount;
+        /// Calculates the total claimable XRD and number of fills for a receipt
+        /// Returns (claimable_xrd, fill_count) - only counts unstake NFTs that are past unbonding
+        fn calculate_claimable_xrd(&self, receipt_id: &NonFungibleLocalId) -> (Decimal, u64) {
+            let receipt_id_u64 = match receipt_id {
+                NonFungibleLocalId::Integer(i) => i.value(),
+                _ => return (dec!(0), 0),
+            };
+            
+            let start_key = CombinedKey::new(receipt_id_u64, 1, 0).key;
+            let end_key = CombinedKey::new(receipt_id_u64, u32::MAX, 0).key;
+            
+            let mut total_claimable = dec!(0);
+            let mut fill_count = 0u64;
+            
+            for (_, unstake_nft_or_lsu, _) in self.order_fill_tree.range(start_key..=end_key) {
+                match unstake_nft_or_lsu {
+                    UnstakeNFTOrLSU::UnstakeNFT(unstake_nft_data) => {
+                        let nft_data: UnstakeData = NonFungibleResourceManager::from(unstake_nft_data.resource_address)
+                            .get_non_fungible_data(&unstake_nft_data.id);
+                        
+                        // Check if past the unbonding period
+                        let current_epoch = Runtime::current_epoch();
+                        if current_epoch >= nft_data.claim_epoch {
+                            total_claimable += nft_data.claim_amount;
+                        }
+                    }
+                    UnstakeNFTOrLSU::LSU(_) => {
+                        // Skip LSUs - they cannot be claimed for XRD instantly
+                    }
                 }
+                fill_count += 1;
             }
-            UnstakeNFTOrLSU::LSU(_) => {
-                // LSUs are NOT claimable for XRD - they need to be collected first
-            }
+            
+            (total_claimable, fill_count)
         }
-        
-        fills_checked += 1;
-    }
-    
-    (total_claimable, fills_checked)
-}
+
 
         /// Gets the claimable XRD amount for a liquidity position.
         /// 
