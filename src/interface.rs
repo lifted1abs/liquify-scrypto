@@ -148,10 +148,10 @@ mod interface_module {
             liquify_component.update_automation(receipt_bucket, auto_refill, refill_threshold)
         }
 
-        pub fn cycle_liquidity(&mut self, receipt_id: NonFungibleLocalId, max_fills_to_process: u64) -> FungibleBucket {
+        pub fn cycle_liquidity(&mut self, receipt_ids: Vec<NonFungibleLocalId>, max_fills_to_process: u64) -> FungibleBucket {
             let liquify_component: Global<Liquify> = self.active_liquify_component.unwrap().into();
             
-            liquify_component.cycle_liquidity(receipt_id.into(), max_fills_to_process)
+            liquify_component.cycle_liquidity(receipt_ids, max_fills_to_process).into()
         }
         
         pub fn get_claimable_xrd(&self, receipt_id: NonFungibleLocalId) -> Decimal {
