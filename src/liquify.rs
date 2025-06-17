@@ -163,6 +163,7 @@ mod liquify_module {
             owner => updatable_by: [];
         },
         methods {
+            
             add_liquidity => PUBLIC;
             increase_liquidity => PUBLIC;
             remove_liquidity => PUBLIC;
@@ -171,6 +172,7 @@ mod liquify_module {
             collect_fills => PUBLIC;
             update_automation => PUBLIC;
             cycle_liquidity => PUBLIC;
+
             get_claimable_xrd => PUBLIC;
             get_liquidity_data => PUBLIC;
             get_buy_list_range => PUBLIC;
@@ -178,13 +180,15 @@ mod liquify_module {
             get_automated_liquidity_range => PUBLIC;
             get_automation_ready_receipts => PUBLIC;
             get_receipt_detail => PUBLIC;
+
             set_component_status => restrict_to: [owner];
             set_platform_fee => restrict_to: [owner];
             set_automation_fee => restrict_to: [owner];
-            collect_platform_fees => restrict_to: [owner];
             set_minimum_liquidity => restrict_to: [owner];
             set_receipt_image_url => restrict_to: [owner];
             set_minimum_refill_threshold => restrict_to: [owner];
+            
+            collect_platform_fees => restrict_to: [owner];
         }
     }
 
