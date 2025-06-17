@@ -608,229 +608,169 @@ mod liquify_module {
             receipt_bucket
         }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-/// Cycles liquidity for one or more receipts by claiming fills and re-adding as liquidity.
-/// 
-/// This method processes liquidity receipts sequentially, cycling each one only if ALL its
-/// fills can be processed within the remaining fill limit. Processing stops when the next receipt
-/// would exceed the max_fills_to_process limit. Each receipt must have both auto_unstake and 
-/// auto_refill enabled, and must meet its refill threshold. An automation fee is deducted for
-/// each receipt and accumulated into a single bucket returned to the caller. The remaining XRD 
-/// is added back to each position's available liquidity.
-/// 
-/// # Arguments
-/// * `receipt_ids`: A `Vec<NonFungibleLocalId>` containing one or more receipt IDs to cycle
-/// * `max_fills_to_process`: Maximum total fills to process across all receipts
-///
-/// # Returns
-/// * A `FungibleBucket` containing the accumulated automation fees in XRD
-pub fn cycle_liquidity(&mut self, receipt_ids: Vec<NonFungibleLocalId>, max_fills_to_process: u64) -> FungibleBucket {
-    assert!(!receipt_ids.is_empty(), "Must provide at least one receipt ID");
-    assert!(max_fills_to_process > 0, "Must process at least one fill");
-    
-    let mut total_automation_fees = FungibleBucket::new(XRD);
-    let mut fills_processed_total = 0u64;
-    
-    for receipt_id in receipt_ids {
-        // First check how many fills this receipt needs
-        let (claimable_xrd, fills_needed) = self.calculate_claimable_xrd(&receipt_id);
-        
-        // Skip if this receipt would exceed our total limit
-        if fills_processed_total + fills_needed > max_fills_to_process {
-            break;
-        }
-        
-        // Skip if no fills to process
-        if fills_needed == 0 {
-            continue;
-        }
-        
-        let nft_data: LiquidityReceipt = self.liquidity_receipt.get_non_fungible_data(&receipt_id);
-        let global_id = NonFungibleGlobalId::new(self.liquidity_receipt.address(), receipt_id.clone());
-        
-        // Get data, check conditions, then drop the borrow
-        let (auto_refill, auto_unstake, refill_threshold, discount) = {
-            let kvs_data = match self.liquidity_data.get(&global_id) {
-                Some(data) => data,
-                None => continue, // Skip if receipt doesn't exist
-            };
-            (nft_data.auto_refill, nft_data.auto_unstake, nft_data.refill_threshold, nft_data.discount)
-        };
-        
-        // Skip if automation not enabled
-        if !auto_refill || !auto_unstake {
-            continue;
-        }
-        
-        // Skip if doesn't meet threshold
-        if claimable_xrd < refill_threshold {
-            continue;
-        }
-        
-        // Now process this receipt - we know all fills will fit
-        let mut total_xrd = FungibleBucket::new(XRD);
-        let receipt_id_u64 = match receipt_id.clone() {
-            NonFungibleLocalId::Integer(i) => i.value(),
-            _ => panic!("Invalid NFT ID type")
-        };
-        
-        // Process fills for this receipt
-        let start_key = CombinedKey::new(receipt_id_u64, 1, 0).key;
-        let end_key = CombinedKey::new(receipt_id_u64, u32::MAX, 0).key;
-        
-        // Collect keys and data first, then process
-        let mut fills_to_process = Vec::new();
-        let mut fills_collected = 0u64;
-        
-        for (key, value, _) in self.order_fill_tree.range(start_key..=end_key) {
-            fills_to_process.push((key, value.clone()));
-            fills_collected += 1;
-        }
-        
-        // Now process the fills
-        for (avl_key, unstake_nft_or_lsu) in fills_to_process {
-            match unstake_nft_or_lsu {
-                UnstakeNFTOrLSU::UnstakeNFT(unstake_nft_data) => {
-                    let local_id: NonFungibleLocalId = unstake_nft_data.id.clone();
-                    
-                    // Get the unstake NFT from vault
-                    let unstake_nft_vault = self.component_vaults.get(&unstake_nft_data.resource_address).unwrap();
-                    let unstake_nft = unstake_nft_vault.as_non_fungible().take_non_fungible(&local_id);
-                    
-                    // Get validator address from the resource address mapping
-                    let validator_address = self.get_validator_from_unstake_nft(&unstake_nft_data.resource_address);
-                    let mut validator: Global<Validator> = Global::from(validator_address);
-                    let claimed_xrd = validator.claim_xrd(unstake_nft);
-                    
-                    total_xrd.put(claimed_xrd);
+        /// Cycles liquidity for one or more receipts by claiming fills and re-adding as liquidity.
+        /// 
+        /// This method processes liquidity receipts sequentially, cycling each one only if ALL its
+        /// fills can be processed within the remaining fill limit. Processing stops when the next receipt
+        /// would exceed the max_fills_to_process limit. Each receipt must have both auto_unstake and 
+        /// auto_refill enabled, and must meet its refill threshold. An automation fee is deducted for
+        /// each receipt and accumulated into a single bucket returned to the caller. The remaining XRD 
+        /// is added back to each position's available liquidity.
+        /// 
+        /// # Arguments
+        /// * `receipt_ids`: A `Vec<NonFungibleLocalId>` containing one or more receipt IDs to cycle
+        /// * `max_fills_to_process`: Maximum total fills to process across all receipts
+        ///
+        /// # Returns
+        /// * A `FungibleBucket` containing the accumulated automation fees in XRD
+        pub fn cycle_liquidity(&mut self, receipt_ids: Vec<NonFungibleLocalId>, max_fills_to_process: u64) -> FungibleBucket {
+            assert!(!receipt_ids.is_empty(), "Must provide at least one receipt ID");
+            assert!(max_fills_to_process > 0, "Must process at least one fill");
+            
+            let mut total_automation_fees = FungibleBucket::new(XRD);
+            let mut fills_processed_total = 0u64;
+            
+            for receipt_id in receipt_ids {
+                // First check how many fills this receipt needs
+                let (claimable_xrd, fills_needed) = self.calculate_claimable_xrd(&receipt_id);
+                
+                // Skip if this receipt would exceed our total limit
+                if fills_processed_total + fills_needed > max_fills_to_process {
+                    break;
                 }
-                UnstakeNFTOrLSU::LSU(_) => {
-                    panic!("Cannot cycle LSU fills - receipt must have auto_unstake enabled");
+                
+                // Skip if no fills to process
+                if fills_needed == 0 {
+                    continue;
                 }
+                
+                let nft_data: LiquidityReceipt = self.liquidity_receipt.get_non_fungible_data(&receipt_id);
+                let global_id = NonFungibleGlobalId::new(self.liquidity_receipt.address(), receipt_id.clone());
+                
+                // Get data, check conditions, then drop the borrow
+                let (auto_refill, auto_unstake, refill_threshold, discount) = {
+                    let kvs_data = match self.liquidity_data.get(&global_id) {
+                        Some(data) => data,
+                        None => continue, // Skip if receipt doesn't exist
+                    };
+                    (nft_data.auto_refill, nft_data.auto_unstake, nft_data.refill_threshold, nft_data.discount)
+                };
+                
+                // Skip if automation not enabled
+                if !auto_refill || !auto_unstake {
+                    continue;
+                }
+                
+                // Skip if doesn't meet threshold
+                if claimable_xrd < refill_threshold {
+                    continue;
+                }
+                
+                // Now process this receipt - we know all fills will fit
+                let mut total_xrd = FungibleBucket::new(XRD);
+                let receipt_id_u64 = match receipt_id.clone() {
+                    NonFungibleLocalId::Integer(i) => i.value(),
+                    _ => panic!("Invalid NFT ID type")
+                };
+                
+                // Process fills for this receipt
+                let start_key = CombinedKey::new(receipt_id_u64, 1, 0).key;
+                let end_key = CombinedKey::new(receipt_id_u64, u32::MAX, 0).key;
+                
+                // Collect keys and data first, then process
+                let mut fills_to_process = Vec::new();
+                let mut fills_collected = 0u64;
+                
+                for (key, value, _) in self.order_fill_tree.range(start_key..=end_key) {
+                    fills_to_process.push((key, value.clone()));
+                    fills_collected += 1;
+                }
+                
+                // Now process the fills
+                for (avl_key, unstake_nft_or_lsu) in fills_to_process {
+                    match unstake_nft_or_lsu {
+                        UnstakeNFTOrLSU::UnstakeNFT(unstake_nft_data) => {
+                            let local_id: NonFungibleLocalId = unstake_nft_data.id.clone();
+                            
+                            // Get the unstake NFT from vault
+                            let unstake_nft_vault = self.component_vaults.get(&unstake_nft_data.resource_address).unwrap();
+                            let unstake_nft = unstake_nft_vault.as_non_fungible().take_non_fungible(&local_id);
+                            
+                            // Get validator address from the resource address mapping
+                            let validator_address = self.get_validator_from_unstake_nft(&unstake_nft_data.resource_address);
+                            let mut validator: Global<Validator> = Global::from(validator_address);
+                            let claimed_xrd = validator.claim_xrd(unstake_nft);
+                            
+                            total_xrd.put(claimed_xrd);
+                        }
+                        UnstakeNFTOrLSU::LSU(_) => {
+                            panic!("Cannot cycle LSU fills - receipt must have auto_unstake enabled");
+                        }
+                    }
+                    
+                    // Remove the processed fill
+                    self.order_fill_tree.remove(&avl_key);
+                }
+                
+                // Update KVS data
+                let mut kvs_data = self.liquidity_data.get_mut(&global_id).unwrap();
+                kvs_data.fills_to_collect = kvs_data.fills_to_collect.saturating_sub(fills_collected);
+                
+                // Take automation fee
+                let fee_amount = self.automation_fee;
+                let automation_fee_bucket = total_xrd.take(fee_amount);
+                total_automation_fees.put(automation_fee_bucket);
+                
+                // Find and remove from current position in AVL tree
+                let mut key_to_remove = None;
+                for (key, tree_global_id, _) in self.buy_list.range(0..u128::MAX) {
+                    if tree_global_id == global_id {
+                        key_to_remove = Some(key);
+                        break;
+                    }
+                }
+                
+                if let Some(key) = key_to_remove {
+                    self.buy_list.remove(&key);
+                }
+                
+                // Add remaining XRD back to liquidity
+                let xrd_to_add = total_xrd.amount();
+                
+                // Update KVS data
+                kvs_data.xrd_liquidity_available += xrd_to_add;
+                let current_epoch = Runtime::current_epoch().number() as u32;
+                kvs_data.last_added_epoch = current_epoch;
+                
+                // Create new key with current epoch
+                let discount_u64 = (discount * dec!(10000)).checked_floor().unwrap().to_string().parse::<u64>().unwrap();
+                let new_combined_key = CombinedKey::new(discount_u64, current_epoch, self.liquidity_receipt_counter);
+                self.liquidity_receipt_counter += 1;
+                
+                // Reinsert at new position
+                self.buy_list.insert(new_combined_key.key, global_id);
+                
+                // Update liquidity index
+                let index_usize = (discount / dec!(0.00025)).checked_floor().unwrap().to_string().parse::<usize>().unwrap();
+                self.liquidity_index[index_usize] += xrd_to_add;
+                
+                // Put XRD in vault
+                self.xrd_liquidity.as_fungible().put(total_xrd);
+                self.total_xrd_locked += xrd_to_add;
+                
+                // Emit the cycle event
+                Runtime::emit_event(LiquidityCycledEvent {
+                    receipt_id,
+                    xrd_amount_cycled: xrd_to_add,
+                    automation_fee: fee_amount,
+                });
+                
+                fills_processed_total += fills_collected;
             }
             
-            // Remove the processed fill
-            self.order_fill_tree.remove(&avl_key);
+            // Return the automation fees to the caller
+            total_automation_fees
         }
-        
-        // Update KVS data
-        let mut kvs_data = self.liquidity_data.get_mut(&global_id).unwrap();
-        kvs_data.fills_to_collect = kvs_data.fills_to_collect.saturating_sub(fills_collected);
-        
-        // Take automation fee
-        let fee_amount = self.automation_fee;
-        let automation_fee_bucket = total_xrd.take(fee_amount);
-        total_automation_fees.put(automation_fee_bucket);
-        
-        // Find and remove from current position in AVL tree
-        let mut key_to_remove = None;
-        for (key, tree_global_id, _) in self.buy_list.range(0..u128::MAX) {
-            if tree_global_id == global_id {
-                key_to_remove = Some(key);
-                break;
-            }
-        }
-        
-        if let Some(key) = key_to_remove {
-            self.buy_list.remove(&key);
-        }
-        
-        // Add remaining XRD back to liquidity
-        let xrd_to_add = total_xrd.amount();
-        
-        // Update KVS data
-        kvs_data.xrd_liquidity_available += xrd_to_add;
-        let current_epoch = Runtime::current_epoch().number() as u32;
-        kvs_data.last_added_epoch = current_epoch;
-        
-        // Create new key with current epoch
-        let discount_u64 = (discount * dec!(10000)).checked_floor().unwrap().to_string().parse::<u64>().unwrap();
-        let new_combined_key = CombinedKey::new(discount_u64, current_epoch, self.liquidity_receipt_counter);
-        self.liquidity_receipt_counter += 1;
-        
-        // Reinsert at new position
-        self.buy_list.insert(new_combined_key.key, global_id);
-        
-        // Update liquidity index
-        let index_usize = (discount / dec!(0.00025)).checked_floor().unwrap().to_string().parse::<usize>().unwrap();
-        self.liquidity_index[index_usize] += xrd_to_add;
-        
-        // Put XRD in vault
-        self.xrd_liquidity.as_fungible().put(total_xrd);
-        self.total_xrd_locked += xrd_to_add;
-        
-        // Emit the cycle event
-        Runtime::emit_event(LiquidityCycledEvent {
-            receipt_id,
-            xrd_amount_cycled: xrd_to_add,
-            automation_fee: fee_amount,
-        });
-        
-        fills_processed_total += fills_collected;
-    }
-    
-    // Return the automation fees to the caller
-    total_automation_fees
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
         /// Removes liquidity and returns XRD to the provider.
