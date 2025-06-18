@@ -23,6 +23,9 @@ pub struct ReceiptDetailData {
     pub fills_to_collect: u64,
     pub last_added_epoch: u32,
     pub claimable_xrd: Decimal,
+    pub total_fills: u64,
+    pub total_stake_claim_value: Decimal,
+    pub total_lsu_redemption_value: Decimal,
 }
 
 #[derive(ScryptoSbor, Debug, Clone)]
@@ -108,9 +111,14 @@ struct LiquidityCycledEvent {
 }
 
 #[derive(ScryptoSbor, ScryptoEvent)]
-struct AutomationUpdatedEvent {
+struct AutoRefillStatusUpdatedEvent {
     receipt_id: NonFungibleLocalId,
     auto_refill: bool,
+}
+
+#[derive(ScryptoSbor, ScryptoEvent)]
+struct RefillThresholdUpdatedEvent {
+    receipt_id: NonFungibleLocalId,
     refill_threshold: Decimal,
 }
 
@@ -155,7 +163,8 @@ pub struct LSUData {
     LiquidityRemovedEvent,
     CollectFillsEvent,
     LiquidityCycledEvent,
-    AutomationUpdatedEvent
+    AutoRefillStatusUpdatedEvent,
+    RefillThresholdUpdatedEvent,
 )]
 mod liquify_module {
     enable_method_auth! {
@@ -598,10 +607,9 @@ mod liquify_module {
             self.liquidity_receipt.update_non_fungible_data(&local_id, "auto_refill", auto_refill);
             
             // Emit the automation update event
-            Runtime::emit_event(AutomationUpdatedEvent {
+            Runtime::emit_event(AutoRefillStatusUpdatedEvent {
                 receipt_id: local_id,
                 auto_refill,
-                refill_threshold: nft_data.refill_threshold,
             });
             
             receipt_bucket
@@ -629,9 +637,8 @@ mod liquify_module {
             self.liquidity_receipt.update_non_fungible_data(&local_id, "refill_threshold", refill_threshold);
             
             // Emit the automation update event
-            Runtime::emit_event(AutomationUpdatedEvent {
+            Runtime::emit_event(RefillThresholdUpdatedEvent {
                 receipt_id: local_id,
-                auto_refill: nft_data.auto_refill,
                 refill_threshold,
             });
             
@@ -1414,8 +1421,9 @@ mod liquify_module {
             let nft_data: LiquidityReceipt = self.liquidity_receipt.get_non_fungible_data(&receipt_id);
             let global_id = NonFungibleGlobalId::new(self.liquidity_receipt.address(), receipt_id.clone());
             
-            // Get claimable XRD amount (we only need the first value for this method)
-            let (claimable_xrd, _, _, _) = self.calculate_claimable_xrd(&receipt_id);
+            // Get all values from calculate_claimable_xrd
+            let (claimable_xrd, total_fills, total_stake_claim_value, total_lsu_redemption_value) = 
+                self.calculate_claimable_xrd(&receipt_id);
             
             let (xrd_liquidity_available, xrd_liquidity_filled, fills_to_collect, last_added_epoch) = 
                 match self.liquidity_data.get(&global_id) {
@@ -1439,6 +1447,9 @@ mod liquify_module {
                 fills_to_collect,
                 last_added_epoch,
                 claimable_xrd,
+                total_fills,
+                total_stake_claim_value,
+                total_lsu_redemption_value,
             }
         }
 
