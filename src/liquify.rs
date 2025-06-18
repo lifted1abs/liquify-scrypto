@@ -49,10 +49,10 @@ pub struct LiquidityReceipt {
 // KVS - Data that updates during fills
 #[derive(ScryptoSbor, PartialEq, Debug, Clone)]
 pub struct LiquidityData {
-    xrd_liquidity_filled: Decimal,
-    xrd_liquidity_available: Decimal,
-    fills_to_collect: u64,
-    last_added_epoch: u32,
+    pub xrd_liquidity_filled: Decimal,
+    pub xrd_liquidity_available: Decimal,
+    pub fills_to_collect: u64,
+    pub last_added_epoch: u32,
 }
 
 #[derive(ScryptoSbor, ScryptoEvent)]

@@ -1,8 +1,9 @@
 use scrypto::prelude::*;
-use crate::liquify::liquify_module::Liquify;
+use crate::liquify::{liquify_module::Liquify, LiquidityData, ReceiptDetailData, AutomationReadyReceipt};
+
 
 #[blueprint]
-#[types(ComponentAddress, ResourceAddress, u32)]
+#[types(ComponentAddress, ResourceAddress, u32, LiquidityData, ReceiptDetailData, AutomationReadyReceipt)]
 mod interface_module {
 
     enable_method_auth! {
@@ -16,13 +17,14 @@ mod interface_module {
             liquify_unstake => PUBLIC;
             liquify_unstake_off_ledger => PUBLIC;
             collect_fills => PUBLIC;
-            update_auto_refill_status => restrict_to: [admin];
-            update_refill_threshold => restrict_to: [admin];
+            update_auto_refill_status => PUBLIC;
+            update_refill_threshold => PUBLIC;
             cycle_liquidity => PUBLIC;
             get_claimable_xrd => PUBLIC;
             get_liquidity_data => PUBLIC;
-            set_interface_target => PUBLIC;
-            get_claimable_xrd => PUBLIC;
+            get_receipt_detail => PUBLIC;
+            get_automation_ready_receipts => PUBLIC;
+            set_interface_target => restrict_to: [owner];
         }
     }
 
@@ -106,57 +108,76 @@ mod interface_module {
             
             liquify_component.increase_liquidity(receipt_bucket, xrd_bucket)
         }
-        
+
         pub fn remove_liquidity(&mut self, liquidity_receipt_bucket: Bucket) -> (Bucket, Bucket) {
             let liquify_component: Global<Liquify> = self.active_liquify_component.unwrap().into();
             
-            let (liquidity_bucket, liquidity_receipt_bucket) = liquify_component.remove_liquidity(liquidity_receipt_bucket);
-
-            (liquidity_bucket, liquidity_receipt_bucket)
+            liquify_component.remove_liquidity(liquidity_receipt_bucket)
         }
 
-        pub fn liquify_unstake(&mut self, lsu_bucket: FungibleBucket, max_iterations: u8) -> (Bucket, FungibleBucket) {
+        pub fn liquify_unstake(&mut self, lsu_bucket: Bucket, max_iterations: u8) -> (Bucket, Bucket) {
             let liquify_component: Global<Liquify> = self.active_liquify_component.unwrap().into();
             
-            let (xrd_bucket, lsu_bucket) = liquify_component.liquify_unstake(lsu_bucket, max_iterations);
-        
-            (xrd_bucket, lsu_bucket)
+            let (xrd_bucket, remaining_lsu) = liquify_component.liquify_unstake(lsu_bucket.as_fungible(), max_iterations);
+            (xrd_bucket, remaining_lsu.into())
         }
 
-        pub fn liquify_unstake_off_ledger(&mut self, lsu_bucket: FungibleBucket, order_keys: Vec<u128>) -> (Bucket, FungibleBucket) {
+        pub fn liquify_unstake_off_ledger(&mut self, lsu_bucket: Bucket, order_ids: Vec<u64>) -> (Bucket, Bucket) {
             let liquify_component: Global<Liquify> = self.active_liquify_component.unwrap().into();
             
-            let (xrd_bucket, lsu_bucket) = liquify_component.liquify_unstake_off_ledger(lsu_bucket, order_keys);
-
-            (xrd_bucket, lsu_bucket)
+            // Convert u64 order IDs to u128 keys as expected by the method
+            let order_keys: Vec<u128> = order_ids.into_iter().map(|id| id as u128).collect();
+            
+            let (xrd_bucket, remaining_lsu) = liquify_component.liquify_unstake_off_ledger(lsu_bucket.as_fungible(), order_keys);
+            (xrd_bucket, remaining_lsu.into())
         }
 
-        pub fn collect_fills(&mut self, liquidity_receipt_bucket: Bucket, number_of_fills_to_collect: u64) -> (Vec<Bucket>, Bucket) {
+        pub fn collect_fills(&mut self, receipt_bucket: Bucket, number_of_fills_to_collect: u64) -> (Vec<Bucket>, Bucket) {
             let liquify_component: Global<Liquify> = self.active_liquify_component.unwrap().into();
             
-            let (bucket_vec, liquidity_receipt_bucket) = liquify_component.collect_fills(liquidity_receipt_bucket, number_of_fills_to_collect);
-        
-            (bucket_vec, liquidity_receipt_bucket)
+            liquify_component.collect_fills(receipt_bucket, number_of_fills_to_collect)
         }
 
-        pub fn cycle_liquidity(&mut self, receipt_ids: Vec<NonFungibleLocalId>, max_fills_to_process: u64) -> FungibleBucket {
+        pub fn update_auto_refill_status(&mut self, receipt_bucket: Bucket, auto_refill: bool) -> Bucket {
+            let liquify_component: Global<Liquify> = self.active_liquify_component.unwrap().into();
+            
+            liquify_component.update_auto_refill_status(receipt_bucket, auto_refill)
+        }
+
+        pub fn update_refill_threshold(&mut self, receipt_bucket: Bucket, refill_threshold: Decimal) -> Bucket {
+            let liquify_component: Global<Liquify> = self.active_liquify_component.unwrap().into();
+            
+            liquify_component.update_refill_threshold(receipt_bucket, refill_threshold)
+        }
+
+        pub fn cycle_liquidity(&mut self, receipt_ids: Vec<NonFungibleLocalId>, max_fills_to_process: u64) -> Bucket {
             let liquify_component: Global<Liquify> = self.active_liquify_component.unwrap().into();
             
             liquify_component.cycle_liquidity(receipt_ids, max_fills_to_process).into()
         }
-        
-        /// Returns comprehensive fill information for a receipt
-        /// Returns (claimable_xrd_now, total_fills, total_stake_claim_value, total_lsu_redemption_value)
-        pub fn get_claimable_xrd(&self, receipt_id: NonFungibleLocalId) -> (Decimal, u64, Decimal, Decimal) {
 
-            self.calculate_claimable_xrd(&receipt_id)
+        pub fn get_claimable_xrd(&self, receipt_id: NonFungibleLocalId) -> (Decimal, u64, Decimal, Decimal) {
+            let liquify_component: Global<Liquify> = self.active_liquify_component.unwrap().into();
             
+            liquify_component.get_claimable_xrd(receipt_id)
         }
 
-        pub fn get_liquidity_data(&self, receipt_id: NonFungibleLocalId) -> crate::liquify::LiquidityData {
+        pub fn get_liquidity_data(&self, receipt_id: NonFungibleLocalId) -> LiquidityData {
             let liquify_component: Global<Liquify> = self.active_liquify_component.unwrap().into();
             
             liquify_component.get_liquidity_data(receipt_id)
+        }
+
+        pub fn get_receipt_detail(&self, receipt_id: NonFungibleLocalId) -> ReceiptDetailData {
+            let liquify_component: Global<Liquify> = self.active_liquify_component.unwrap().into();
+            
+            liquify_component.get_receipt_detail(receipt_id)
+        }
+
+        pub fn get_automation_ready_receipts(&self) -> Vec<AutomationReadyReceipt> {
+            let liquify_component: Global<Liquify> = self.active_liquify_component.unwrap().into();
+            
+            liquify_component.get_automation_ready_receipts()
         }
     }
 }
