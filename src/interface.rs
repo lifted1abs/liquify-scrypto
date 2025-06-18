@@ -16,11 +16,13 @@ mod interface_module {
             liquify_unstake => PUBLIC;
             liquify_unstake_off_ledger => PUBLIC;
             collect_fills => PUBLIC;
-            update_automation => PUBLIC;
+            update_auto_refill_status => restrict_to: [admin];
+            update_refill_threshold => restrict_to: [admin];
             cycle_liquidity => PUBLIC;
             get_claimable_xrd => PUBLIC;
             get_liquidity_data => PUBLIC;
             set_interface_target => PUBLIC;
+            get_claimable_xrd => PUBLIC;
         }
     }
 
@@ -137,27 +139,18 @@ mod interface_module {
             (bucket_vec, liquidity_receipt_bucket)
         }
 
-        pub fn update_automation(
-            &mut self, 
-            receipt_bucket: Bucket, 
-            auto_refill: bool, 
-            refill_threshold: Decimal
-        ) -> Bucket {
-            let liquify_component: Global<Liquify> = self.active_liquify_component.unwrap().into();
-            
-            liquify_component.update_automation(receipt_bucket, auto_refill, refill_threshold)
-        }
-
         pub fn cycle_liquidity(&mut self, receipt_ids: Vec<NonFungibleLocalId>, max_fills_to_process: u64) -> FungibleBucket {
             let liquify_component: Global<Liquify> = self.active_liquify_component.unwrap().into();
             
             liquify_component.cycle_liquidity(receipt_ids, max_fills_to_process).into()
         }
         
-        pub fn get_claimable_xrd(&self, receipt_id: NonFungibleLocalId) -> Decimal {
-            let liquify_component: Global<Liquify> = self.active_liquify_component.unwrap().into();
+        /// Returns comprehensive fill information for a receipt
+        /// Returns (claimable_xrd_now, total_fills, total_stake_claim_value, total_lsu_redemption_value)
+        pub fn get_claimable_xrd(&self, receipt_id: NonFungibleLocalId) -> (Decimal, u64, Decimal, Decimal) {
+
+            self.calculate_claimable_xrd(&receipt_id)
             
-            liquify_component.get_claimable_xrd(receipt_id)
         }
 
         pub fn get_liquidity_data(&self, receipt_id: NonFungibleLocalId) -> crate::liquify::LiquidityData {
