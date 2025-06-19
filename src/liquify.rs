@@ -546,15 +546,6 @@ mod liquify_module {
 
 
 
-
-
-
-
-
-
-
-
-        /// Updates only the auto refill status for a liquidity receipt
         pub fn update_auto_refill_status(&mut self, receipt_bucket: Bucket, auto_refill: bool) -> Bucket {
             assert!(receipt_bucket.resource_address() == self.liquidity_receipt.address(), "Bucket must contain Liquify liquidity receipt");
             assert!(receipt_bucket.amount() == dec!(1), "Must provide exactly one liquidity receipt");
@@ -572,31 +563,39 @@ mod liquify_module {
             // Handle automation tracking changes
             if auto_refill && !nft_data.auto_refill {
                 // Enabling automation
-                self.automated_liquidity.insert(self.automated_liquidity_index, global_id.clone());
+                self.automated_liquidity.insert(self.automated_liquidity_index, global_id);
                 self.automated_liquidity_index += 1;
             } else if !auto_refill && nft_data.auto_refill {
-                // Disabling automation - need to find and remove
-                let mut target_index = None;
+                // Disabling automation
+                let mut found_at_index = None;
+                
+                // Find the index to remove
                 for i in 1..self.automated_liquidity_index {
                     if let Some(stored_global_id) = self.automated_liquidity.get(&i) {
                         if *stored_global_id == global_id {
-                            target_index = Some(i);
+                            found_at_index = Some(i);
                             break;
                         }
                     }
                 }
                 
-                if let Some(index_to_remove) = target_index {
-                    self.automated_liquidity.remove(&index_to_remove);
-                    
-                    // Move last entry to fill the gap (if not removing the last entry)
+                if let Some(index_to_remove) = found_at_index {
                     let last_index = self.automated_liquidity_index - 1;
-                    if index_to_remove != last_index && last_index > 0 {
-                        if let Some(last_entry) = self.automated_liquidity.get(&last_index) {
-                            let last_entry_clone = (*last_entry).clone();
-                            self.automated_liquidity.remove(&last_index);
-                            self.automated_liquidity.insert(index_to_remove, last_entry_clone);
-                        }
+                    
+                    if index_to_remove == last_index {
+                        // Removing the last entry - simple case
+                        self.automated_liquidity.remove(&index_to_remove);
+                    } else {
+                        // Not the last entry - need to move last to fill gap
+                        // Get the last entry first
+                        let last_entry = self.automated_liquidity.get(&last_index)
+                            .expect("Last entry should exist")
+                            .clone();
+                        
+                        // Now perform both operations
+                        self.automated_liquidity.remove(&index_to_remove);
+                        self.automated_liquidity.remove(&last_index);
+                        self.automated_liquidity.insert(index_to_remove, last_entry);
                     }
                     
                     self.automated_liquidity_index -= 1;
@@ -619,14 +618,12 @@ mod liquify_module {
         pub fn update_refill_threshold(&mut self, receipt_bucket: Bucket, refill_threshold: Decimal) -> Bucket {
             assert!(receipt_bucket.resource_address() == self.liquidity_receipt.address(), "Bucket must contain Liquify liquidity receipt");
             assert!(receipt_bucket.amount() == dec!(1), "Must provide exactly one liquidity receipt");
-            assert!(refill_threshold >= self.minimum_refill_threshold, "Refill threshold must be at least 10,000 XRD");
+            assert!(refill_threshold >= self.minimum_refill_threshold, "Refill threshold is lower than the required minimum");
             
             let local_id = receipt_bucket.as_non_fungible().non_fungible_local_id();
             let nft_data: LiquidityReceipt = self.liquidity_receipt.get_non_fungible_data(&local_id);
             let global_id = NonFungibleGlobalId::new(self.liquidity_receipt.address(), local_id.clone());
             let xrd_liquidity_available = self.liquidity_data.get(&global_id).unwrap().xrd_liquidity_available;
-            
-            assert!(refill_threshold <= xrd_liquidity_available, "Refill threshold cannot exceed available liquidity");
             
             // Skip if no change
             if nft_data.refill_threshold == refill_threshold {
