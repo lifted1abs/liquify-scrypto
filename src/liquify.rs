@@ -846,25 +846,38 @@ mod liquify_module {
                     
                     // Find and remove from automated tracking
                     let mut target_index = None;
+                    let mut last_entry_data = None;
+                    
+                    // First pass: find the target and get last entry data if needed
                     for i in 1..self.automated_liquidity_index {
                         if let Some(stored_global_id) = self.automated_liquidity.get(&i) {
                             if *stored_global_id == global_id {
                                 target_index = Some(i);
-                                break;
+                            }
+                            // Store the last entry data
+                            if i == self.automated_liquidity_index - 1 {
+                                last_entry_data = Some(stored_global_id.clone());
                             }
                         }
                     }
                     
+                    // Now do the removal and reshuffling
                     if let Some(index_to_remove) = target_index {
-                        self.automated_liquidity.remove(&index_to_remove);
-                        
-                        // Move last entry to fill the gap (if not removing the last entry)
                         let last_index = self.automated_liquidity_index - 1;
-                        if index_to_remove != last_index && last_index > 0 {
-                            if let Some(last_entry) = self.automated_liquidity.get(&last_index) {
-                                let last_entry_clone = (*last_entry).clone();
+                        
+                        if index_to_remove == last_index {
+                            // Removing the last entry - simple case
+                            self.automated_liquidity.remove(&index_to_remove);
+                        } else {
+                            // Not the last entry - need to move last to fill gap
+                            // Remove the target entry
+                            self.automated_liquidity.remove(&index_to_remove);
+                            
+                            if let Some(last_entry) = last_entry_data {
+                                // Remove from last position
                                 self.automated_liquidity.remove(&last_index);
-                                self.automated_liquidity.insert(index_to_remove, last_entry_clone);
+                                // Insert at the gap position
+                                self.automated_liquidity.insert(index_to_remove, last_entry);
                             }
                         }
                         
@@ -873,39 +886,37 @@ mod liquify_module {
                 }
 
                 let index = (discount / dec!(0.00025)).checked_floor().unwrap().to_string().parse::<usize>().unwrap();
-                let currently_liquidity_at_discount = self.liquidity_index[index];
-                self.liquidity_index[index] = currently_liquidity_at_discount - order_size;
+                self.liquidity_index[index] -= order_size;
 
-                total_order_size += order_size;
-
-                // Find and remove from AVL tree
+                // Find and remove from buy list
                 let mut key_to_remove = None;
-                self.buy_list.range_mut(0..u128::MAX).for_each(|(key, tree_global_id, _)| {
-                    if tree_global_id == &global_id {
-                        key_to_remove = Some(*key);
-                        return scrypto_avltree::IterMutControl::Break;
+                for (key, tree_global_id, _) in self.buy_list.range(0..u128::MAX) {
+                    if tree_global_id == global_id {
+                        key_to_remove = Some(key);
+                        break;
                     }
-                    scrypto_avltree::IterMutControl::Continue
-                });
+                }
                 
                 if let Some(key) = key_to_remove {
                     self.buy_list.remove(&key);
                 }
-                
-                // Update KVS data
+
                 kvs_data.xrd_liquidity_available = dec!(0);
-                
-                // Emit the event for this receipt
+                total_order_size += order_size;
+            }
+
+            let xrd_bucket = self.xrd_liquidity.take(total_order_size);
+            self.total_xrd_locked -= total_order_size;
+
+            // Emit events
+            for local_id in liquidity_receipt_bucket.as_non_fungible().non_fungible_local_ids() {
                 Runtime::emit_event(LiquidityRemovedEvent {
                     receipt_id: local_id,
-                    xrd_amount: order_size,
+                    xrd_amount: total_order_size,
                 });
             }
 
-            let user_funds = self.xrd_liquidity.take(total_order_size);
-            self.total_xrd_locked -= total_order_size;
-
-            (user_funds, liquidity_receipt_bucket)
+            (xrd_bucket, liquidity_receipt_bucket)
         }
 
         /// Processes LSU unstaking using on-ledger order matching.
