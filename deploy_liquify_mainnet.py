@@ -28,63 +28,21 @@ BLUEPRINT_NAME = "Liquify"
 BLUEPRINT_FUNCTION = "instantiate_liquify"
 
 # Network Configuration
-NETWORK = "stokenet"  # "stokenet" or "mainnet"
-NETWORK_ID = 2 if NETWORK == "stokenet" else 1
+NETWORK = "mainnet"  # "stokenet" or "mainnet"
+NETWORK_ID = 1  # Mainnet = 1, Stokenet = 2
 DOCKER_IMAGE = "radixdlt/scrypto-builder:v1.2.0"
 DOCKER_PLATFORM = "linux/amd64"
 
 # Your personal address where you want owner badges sent
-PERSONAL_ADDRESS = "account_tdx_2_12yqz8dp4gu5wn70k66qqncuhh0hny77tag3ync44w0yrshpxumrj55"
+PERSONAL_ADDRESS = "account_tdx_2_12yqz8dp4gu5wn70k66qqncuhh0hny77tag3ync44w0yrshpxumrj55"  # TODO: Update with mainnet address
 
 # Gateway URL
 GATEWAY_URL = os.getenv('GATEWAY_URL')
 if not GATEWAY_URL:
-    if NETWORK == "stokenet":
-        GATEWAY_URL = "https://stokenet.radixdlt.com"
-    else:
-        GATEWAY_URL = "https://mainnet.radixdlt.com"
+    GATEWAY_URL = "https://mainnet.radixdlt.com"
     print(f"Using default gateway URL: {GATEWAY_URL}")
 
 # ===== END CONFIGURATION =====
-
-async def get_funds_from_faucet(gateway, account, public_key, private_key):
-    """Get test XRD from the Stokenet faucet."""
-    print("\n=== Getting XRD from faucet ===")
-    
-    manifest = f"""
-    CALL_METHOD
-        Address("component_tdx_2_1cptxxxxxxxxxfaucetxxxxxxxxx000527798379xxxxxxxxxyulkzl")
-        "lock_fee"
-        Decimal("100")
-    ;
-    CALL_METHOD
-        Address("component_tdx_2_1cptxxxxxxxxxfaucetxxxxxxxxx000527798379xxxxxxxxxyulkzl")
-        "free"
-    ;
-    CALL_METHOD
-        Address("{account.as_str()}")
-        "try_deposit_batch_or_abort"
-        Expression("ENTIRE_WORKTOP")
-        Enum<0u8>()
-    ;
-    """
-    
-    try:
-        payload, intent = await gateway.build_transaction_str(manifest, public_key, private_key)
-        await gateway.submit_transaction(payload)
-        status = await gateway.get_transaction_status(intent)
-        print(f"Faucet transaction status: {status}")
-        
-        # Wait for transaction to be processed
-        await asyncio.sleep(2)
-        
-        # Check new balance
-        balance = await gateway.get_xrd_balance(account)
-        print(f"New balance: {balance} XRD")
-        return balance
-    except Exception as e:
-        print(f"Failed to get funds from faucet: {e}")
-        return 0
 
 def build_with_docker():
     """Build the project using Docker."""
@@ -176,7 +134,7 @@ async def main():
             print(f"Deploying with account: {account.as_str()}")
             print(f"Network: {network_config['network_name']}")
 
-            # Check and get funds if needed
+            # Check balance
             balance = 0
             try:
                 balance = await gateway.get_xrd_balance(account)
@@ -185,34 +143,21 @@ async def main():
             
             print(f"Current balance: {balance} XRD")
             
-            # Get funds from faucet if balance is low and we're on Stokenet
-            if balance < 500 and NETWORK == "stokenet":
-                balance = await get_funds_from_faucet(gateway, account, public_key, private_key)
-            
-            # Check if we have sufficient funds
-            if balance < 100:
-                print('\n=== FUND ACCOUNT ===')
+            # Check if we have sufficient funds for mainnet deployment
+            if balance < 200:
+                print('\n=== INSUFFICIENT FUNDS ===')
                 print(f'Address: {account.as_str()}')
-                print('Minimum 100 XRD required')
+                print(f'Current balance: {balance} XRD')
+                print('Minimum 200 XRD required for mainnet deployment')
+                print('Please send XRD to the address above')
                 
-                if network_config['network_name'] == 'stokenet':
-                    print('Attempting to get more funds from faucet...')
-                    # Try faucet 3 more times
-                    for i in range(3):
-                        if balance >= 100:
-                            break
-                        print(f"Faucet attempt {i+2}...")
-                        balance = await get_funds_from_faucet(gateway, account, public_key, private_key)
-                        await asyncio.sleep(2)
-                    
-                    if balance < 100:
-                        print('Please fund manually using faucet or run: python liquify_spammer.py')
-                else:
-                    print('Please send XRD to this address')
-                
-                while balance < 100:
+                while balance < 200:
                     await asyncio.sleep(5)
                     balance = await gateway.get_xrd_balance(account)
+                    if int(balance) % 10 == 0:  # Print every 10 XRD increment
+                        print(f"Current balance: {balance} XRD")
+
+            print(f"✓ Sufficient balance: {balance} XRD")
 
             # Load config or create new one
             config_path = script_path / f"{NETWORK}.config.json"
@@ -264,9 +209,9 @@ async def main():
                 # Use exactly the same pattern as Surge deployment
                 import radix_engine_toolkit as ret
                 
-                # Create owner role for the package - using the resource address
+                # Create owner role for the package - using the mainnet resource address
                 owner_amount = '1'
-                owner_resource = 'resource_tdx_2_1t40nwpv3ra5k34wy2nug6pds2mup7gszxwkgsg68mcvx550q6zmpkw'  # Hardcoded as requested
+                owner_resource = 'resource_rdx1t5av9jksz5a2952qmhv5h7t2k0xt4vkv4wj7ekdchjkq435ujudss5'  # Mainnet owner resource from Surge config
                 owner_role = ret.OwnerRole.UPDATABLE(ret.AccessRule.require_amount(ret.Decimal(owner_amount), ret.Address(owner_resource)))
                 
                 # Read the files as Surge does
@@ -327,9 +272,9 @@ async def main():
                 print(f"LIQUIFY_OWNER_BADGE: {addresses[1]}")
                 print(f"LIQUIFY_LIQUIDITY_RECEIPT: {addresses[2]}")
 
-            # Set platform fee and enable the component BEFORE transferring badges
+            # Set platform fee (no component enabling for mainnet)
             if 'LIQUIFY_COMPONENT' in config_data:
-                # First set platform fee
+                # Set platform fee
                 print("\n=== Setting Platform Fee ===")
                 
                 platform_fee_input = input("Enter platform fee percentage (e.g., 1 for 1%, 0.01 for 0.01%): ")
@@ -373,47 +318,11 @@ async def main():
                 
                 except ValueError:
                     print("Invalid input for platform fee. Skipping fee configuration.")
-                
-                # Now enable the component
-                print("\n=== Enabling Liquify Component ===")
-                
-                manifest = f"""
-                CALL_METHOD
-                    Address("{account.as_str()}")
-                    "lock_fee"
-                    Decimal("10")
-                ;
-                CALL_METHOD
-                    Address("{account.as_str()}")
-                    "create_proof_of_amount"
-                    Address("{config_data['LIQUIFY_OWNER_BADGE']}")
-                    Decimal("1")
-                ;
-                CALL_METHOD
-                    Address("{config_data['LIQUIFY_COMPONENT']}")
-                    "set_component_status"
-                    true
-                ;
-                CALL_METHOD
-                    Address("{account.as_str()}")
-                    "deposit_batch"
-                    Expression("ENTIRE_WORKTOP")
-                ;
-                """
-                
-                print("Enabling component...")
-                payload, intent = await gateway.build_transaction_str(manifest, public_key, private_key)
-                await gateway.submit_transaction(payload)
-                status = await gateway.get_transaction_status(intent)
-                
-                if status == "CommittedSuccess":
-                    print("✓ Component enabled successfully!")
-                else:
-                    print(f"✗ Failed to enable component: {status}")
 
-            # Transfer owner badges to your personal address AFTER enabling
+            # Transfer owner badges to your personal address (no enabling step for mainnet)
             if 'LIQUIFY_OWNER_BADGE' in config_data and PERSONAL_ADDRESS:
                 print("\n=== Transferring Owner Badges ===")
+                print("WARNING: Using stokenet personal address. Update PERSONAL_ADDRESS for mainnet!")
                 
                 manifest = f"""
                 CALL_METHOD
@@ -456,6 +365,10 @@ async def main():
             print(f"Component address: {config_data.get('LIQUIFY_COMPONENT', 'N/A')}")
             print(f"Owner badge: {config_data.get('LIQUIFY_OWNER_BADGE', 'N/A')}")
             print(f"Liquidity receipt: {config_data.get('LIQUIFY_LIQUIDITY_RECEIPT', 'N/A')}")
+            
+            # Final balance check
+            final_balance = await gateway.get_xrd_balance(account)
+            print(f"\nFinal account balance: {final_balance} XRD")
 
     except Exception as e:
         print(f"\nError during deployment: {e}")

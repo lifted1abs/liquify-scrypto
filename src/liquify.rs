@@ -20,6 +20,7 @@ pub struct ReceiptDetailData {
     pub refill_threshold: Decimal,
     pub xrd_liquidity_available: Decimal,
     pub xrd_liquidity_filled: Decimal,
+    pub liquidity_ahead: Decimal,
     pub fills_to_collect: u64,
     pub last_added_epoch: u32,
     pub claimable_xrd: Decimal,
@@ -32,7 +33,7 @@ pub struct ReceiptDetailData {
 pub struct AutomationReadyReceipt {
     pub receipt_id: NonFungibleLocalId,
     pub discount: Decimal,
-    pub total_filled: Decimal, 
+    pub total_fills: u64,
     pub claimable_xrd: Decimal,
     pub refill_threshold: Decimal,
 }
@@ -184,12 +185,10 @@ mod liquify_module {
             cycle_liquidity => PUBLIC;
 
             get_claimable_xrd => PUBLIC;
-            get_liquidity_data => PUBLIC;
-            get_buy_list_range => PUBLIC;
-            get_liquidity_data_range => PUBLIC;
-            get_automated_liquidity_range => PUBLIC;
+            get_raw_buy_list_range => PUBLIC;
             get_automation_ready_receipts => PUBLIC;
             get_receipt_detail => PUBLIC;
+            get_active_liquidity_positions => PUBLIC;
 
             set_component_status => restrict_to: [owner];
             set_platform_fee => restrict_to: [owner];
@@ -197,7 +196,6 @@ mod liquify_module {
             set_minimum_liquidity => restrict_to: [owner];
             set_receipt_image_url => restrict_to: [owner];
             set_minimum_refill_threshold => restrict_to: [owner];
-            
             collect_platform_fees => restrict_to: [owner];
         }
     }
@@ -351,16 +349,14 @@ mod liquify_module {
                     update_refill_threshold => Free, updatable;
                     cycle_liquidity => Free, updatable;
                     get_claimable_xrd => Free, updatable;
-                    get_liquidity_data => Free, updatable;
                     set_component_status => Free, updatable;
                     set_platform_fee => Free, updatable;
                     set_automation_fee => Free, updatable;
                     collect_platform_fees => Free, updatable;
                     set_minimum_liquidity => Free, updatable;
                     set_receipt_image_url => Free, updatable;
-                    get_buy_list_range => Free, updatable;
-                    get_liquidity_data_range => Free, updatable;
-                    get_automated_liquidity_range => Free, updatable;
+                    get_raw_buy_list_range => Free, updatable;
+                    get_active_liquidity_positions => Free, updatable;
                     set_minimum_refill_threshold => Free, updatable;
                     get_automation_ready_receipts => Free, updatable;
                     get_receipt_detail => Free, updatable;
@@ -807,7 +803,7 @@ mod liquify_module {
         }
 
 
-        
+
 /// Removes liquidity and returns XRD to the provider.
 /// 
 /// This method allows liquidity providers to withdraw their available XRD liquidity. Only XRD that
@@ -1461,6 +1457,8 @@ pub fn remove_liquidity(&mut self, liquidity_receipt_bucket: Bucket) -> (Bucket,
                     ),
                     None => (dec!(0), dec!(0), 0, 0)
                 };
+
+            let liquidity_ahead = self.calculate_liquidity_ahead(&receipt_id);
             
             ReceiptDetailData {
                 receipt_id,
@@ -1469,6 +1467,7 @@ pub fn remove_liquidity(&mut self, liquidity_receipt_bucket: Bucket) -> (Bucket,
                 auto_refill: nft_data.auto_refill,
                 refill_threshold: nft_data.refill_threshold,
                 xrd_liquidity_available,
+                liquidity_ahead,
                 xrd_liquidity_filled,
                 fills_to_collect,
                 last_added_epoch,
@@ -1479,28 +1478,40 @@ pub fn remove_liquidity(&mut self, liquidity_receipt_bucket: Bucket) -> (Bucket,
             }
         }
 
-        pub fn get_automation_ready_receipts(&self) -> Vec<AutomationReadyReceipt> {
+        pub fn get_automation_ready_receipts(&self, start_index: u64, batch_size: u64) -> Vec<AutomationReadyReceipt> {
             let mut ready_receipts = Vec::new();
+            let mut checked_count = 0u64;
             
-            for i in 1..self.automated_liquidity_index {
+            let start = std::cmp::max(start_index, 1);
+            let end = self.automated_liquidity_index;
+            
+            for i in start..end {
                 if let Some(global_id) = self.automated_liquidity.get(&i) {
                     let receipt_id = global_id.local_id().clone();
                     let nft_data: LiquidityReceipt = self.liquidity_receipt.get_non_fungible_data(&receipt_id);
                     
                     // Calculate claimable XRD (only need first value)
-                    let (claimable_xrd, _, _, _) = self.calculate_claimable_xrd(&receipt_id);
+                    let (claimable_xrd, total_fills, _, _) = self.calculate_claimable_xrd(&receipt_id);
                     
                     if claimable_xrd >= nft_data.refill_threshold {
-                        let kvs_data = self.liquidity_data.get(&global_id);
-                        let total_filled = kvs_data.map(|data| data.xrd_liquidity_filled).unwrap_or(dec!(0));
                         
                         ready_receipts.push(AutomationReadyReceipt {
                             receipt_id,
                             discount: nft_data.discount,
-                            total_filled,
+                            total_fills,
                             claimable_xrd,
                             refill_threshold: nft_data.refill_threshold,
                         });
+                        
+                        if ready_receipts.len() >= batch_size as usize {
+                            break;
+                        }
+                    }
+                    
+                    checked_count += 1;
+                    // Optional: limit how many positions we check to prevent gas issues
+                    if checked_count >= batch_size * 10 {
+                        break;
                     }
                 }
             }
@@ -1576,7 +1587,7 @@ pub fn remove_liquidity(&mut self, liquidity_receipt_bucket: Bucket) -> (Bucket,
         ///
         /// # Returns
         /// * A `Vec<(u128, NonFungibleGlobalId)>` containing tuples of AVL tree keys and receipt global IDs
-        pub fn get_buy_list_range(&self, start_index: u64, count: u64) -> Vec<(u128, NonFungibleGlobalId)>{
+        pub fn get_raw_buy_list_range(&self, start_index: u64, count: u64) -> Vec<(u128, NonFungibleGlobalId)>{
             let mut results = Vec::new();
             let mut current_index = 0u64;
             
@@ -1602,84 +1613,55 @@ pub fn remove_liquidity(&mut self, liquidity_receipt_bucket: Bucket) -> (Bucket,
             results
         }
 
-        /// Gets a range of liquidity data entries.
-        /// 
-        /// This method returns paginated liquidity position data by iterating through sequential receipt IDs
-        /// starting from the given index. Useful for indexers or dashboards that need to display all active
-        /// liquidity positions with their current state including available/filled amounts and pending fills.
-        /// Note that receipt IDs start at 1, so start_index 0 will begin with receipt ID 1.
-        /// 
-        /// # Arguments
-        /// * `start_index`: The `u64` starting position (0-based, maps to receipt ID start_index + 1)
-        /// * `count`: The `u64` maximum number of entries to return
-        ///
-        /// # Returns
-        /// * A `Vec<(NonFungibleGlobalId, LiquidityData)>` containing receipt IDs and their associated data
-        pub fn get_liquidity_data_range(&self, start_index: u64, count: u64) -> Vec<(NonFungibleGlobalId, LiquidityData)> {
+        pub fn get_active_liquidity_positions(&self, start_index: u64, count: u64) -> Vec<ReceiptDetailData> {
             let mut results = Vec::new();
+            let mut current_index = 0u64;
             
-            // Since liquidity_data is keyed by NonFungibleGlobalId, we'll iterate through receipt IDs
-            // starting from start_index + 1 (since receipt counter starts at 1)
-            let start_id = start_index + 1;
-            let end_id = std::cmp::min(start_id + count, self.liquidity_receipt_counter);
-            
-            for id in start_id..end_id {
-                let local_id = NonFungibleLocalId::Integer(IntegerNonFungibleLocalId::new(id));
-                let global_id = NonFungibleGlobalId::new(self.liquidity_receipt.address(), local_id);
+            // Iterate through actual positions in the buy list
+            for (_, global_id, _) in self.buy_list.range(0..u128::MAX) {
+                if current_index < start_index {
+                    current_index += 1;
+                    continue;
+                }
                 
-                // Check if this global_id exists in our KVS
-                if let Some(liquidity_data) = self.liquidity_data.get(&global_id) {
-                    results.push((global_id, liquidity_data.clone()));
+                if results.len() >= count as usize {
+                    break;
                 }
+                
+                let receipt_id = global_id.local_id().clone();
+                results.push(self.get_receipt_detail(receipt_id));
+                current_index += 1;
             }
             
             results
         }
 
-        /// Gets a range of automated liquidity positions.
-        /// 
-        /// This method returns paginated entries from the automated liquidity tracking index. Only positions
-        /// with auto_refill enabled are included. The index maintains insertion order and handles gaps when
-        /// positions disable automation. Useful for automation bots to identify which positions need cycling
-        /// based on their refill thresholds and claimable amounts.
-        /// 
-        /// # Arguments
-        /// * `start_index`: The `u64` index to start from (minimum 1)
-        /// * `count`: The `u64` maximum number of entries to return
-        ///
-        /// # Returns
-        /// * A `Vec<(u64, NonFungibleGlobalId)>` containing index positions and receipt global IDs
-        pub fn get_automated_liquidity_range(&self, start_index: u64, count: u64) -> Vec<(u64, NonFungibleGlobalId)> {
-            let mut results = Vec::new();
+        fn calculate_liquidity_ahead(&self, receipt_id: &NonFungibleLocalId) -> Decimal {
+            let global_id = NonFungibleGlobalId::new(self.liquidity_receipt.address(), receipt_id.clone());
+            let nft_data: LiquidityReceipt = self.liquidity_receipt.get_non_fungible_data(receipt_id);
+            let discount = nft_data.discount;
             
-            // automated_liquidity is indexed from 1 to automated_liquidity_index - 1
-            let start = std::cmp::max(start_index, 1);
-            let end = std::cmp::min(start + count, self.automated_liquidity_index);
+            let mut liquidity_ahead = Decimal::ZERO;
             
-            for index in start..end {
-                if let Some(global_id) = self.automated_liquidity.get(&index) {
-                    results.push((index, global_id.clone()));
+            // Find our position's key in the tree
+            let mut our_key = None;
+            for (key, tree_global_id, _) in self.buy_list.range(0..u128::MAX) {
+                if tree_global_id == global_id {
+                    our_key = Some(key);
+                    break;
                 }
             }
             
-            results
-        }
-
-        /// Gets the current liquidity data for a specific receipt.
-        /// 
-        /// This method returns the mutable liquidity data stored in the key-value store for a given
-        /// receipt ID. This includes the current available liquidity, amount already filled, number
-        /// of fills pending collection, and the epoch when liquidity was last added. Useful for
-        /// frontends to display position details or for users to check their liquidity status.
-        /// 
-        /// # Arguments
-        /// * `receipt_id`: The `NonFungibleLocalId` of the liquidity receipt to query
-        ///
-        /// # Returns
-        /// * A `LiquidityData` struct containing the current state of the liquidity position
-        pub fn get_liquidity_data(&self, receipt_id: NonFungibleLocalId) -> LiquidityData {
-            let global_id = NonFungibleGlobalId::new(self.liquidity_receipt.address(), receipt_id);
-            self.liquidity_data.get(&global_id).unwrap().clone()
+            if let Some(our_key) = our_key {
+                // Sum all liquidity from start up to (but not including) our position
+                for (key, other_global_id, _) in self.buy_list.range(0..our_key) {
+                    if let Some(kvs_data) = self.liquidity_data.get(&other_global_id) {
+                        liquidity_ahead += kvs_data.xrd_liquidity_available;
+                    }
+                }
+            }
+            
+            liquidity_ahead
         }
 
 

@@ -1,3 +1,5 @@
+// src/interface.rs
+
 use scrypto::prelude::*;
 use crate::liquify::{liquify_module::Liquify, LiquidityData, ReceiptDetailData, AutomationReadyReceipt};
 
@@ -21,9 +23,10 @@ mod interface_module {
             update_refill_threshold => PUBLIC;
             cycle_liquidity => PUBLIC;
             get_claimable_xrd => PUBLIC;
-            get_liquidity_data => PUBLIC;
-            get_receipt_detail => PUBLIC;
+            get_raw_buy_list_range => PUBLIC;
             get_automation_ready_receipts => PUBLIC;
+            get_receipt_detail => PUBLIC;
+            get_active_liquidity_positions => PUBLIC;
             set_interface_target => restrict_to: [owner];
         }
     }
@@ -162,22 +165,28 @@ mod interface_module {
             liquify_component.get_claimable_xrd(receipt_id)
         }
 
-        pub fn get_liquidity_data(&self, receipt_id: NonFungibleLocalId) -> LiquidityData {
-            let liquify_component: Global<Liquify> = self.active_liquify_component.unwrap().into();
-            
-            liquify_component.get_liquidity_data(receipt_id)
-        }
-
         pub fn get_receipt_detail(&self, receipt_id: NonFungibleLocalId) -> ReceiptDetailData {
             let liquify_component: Global<Liquify> = self.active_liquify_component.unwrap().into();
             
             liquify_component.get_receipt_detail(receipt_id)
         }
 
-        pub fn get_automation_ready_receipts(&self) -> Vec<AutomationReadyReceipt> {
+        pub fn get_automation_ready_receipts(&self, start_index: u64, batch_size: u64) -> Vec<AutomationReadyReceipt> {
             let liquify_component: Global<Liquify> = self.active_liquify_component.unwrap().into();
             
-            liquify_component.get_automation_ready_receipts()
+            liquify_component.get_automation_ready_receipts(start_index, batch_size)
+        }
+
+        pub fn get_raw_buy_list_range(&self, start_index: u64, count: u64) -> Vec<(u128, NonFungibleGlobalId)> {
+            let liquify_component: Global<Liquify> = self.active_liquify_component.unwrap().into();
+            
+            liquify_component.get_raw_buy_list_range(start_index, count)
+        }
+
+        pub fn get_active_liquidity_positions(&self, start_index: u64, count: u64) -> Vec<ReceiptDetailData> {
+            let liquify_component: Global<Liquify> = self.active_liquify_component.unwrap().into();
+            
+            liquify_component.get_active_liquidity_positions(start_index, count)
         }
     }
 }
