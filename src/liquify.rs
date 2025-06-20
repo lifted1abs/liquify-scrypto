@@ -807,117 +807,134 @@ mod liquify_module {
         }
 
 
-        /// Removes liquidity and returns XRD to the provider.
-        /// 
-        /// This method allows liquidity providers to withdraw their available XRD liquidity. Only XRD that
-        /// hasn't been used to fill orders can be withdrawn - any fills must be collected separately.
-        /// If the position has auto_refill enabled, it will be disabled and removed from automation tracking.
-        /// The position is removed from the buy list order book and the liquidity index is updated. Multiple
-        /// receipts can be processed in a single transaction.
-        /// 
-        /// # Arguments
-        /// * `liquidity_receipt_bucket`: A `Bucket` containing one or more liquidity receipt NFTs
-        ///
-        /// # Returns
-        /// * A tuple containing:
-        ///   - `Bucket`: The withdrawn XRD from all provided receipts
-        ///   - `Bucket`: The liquidity receipt NFTs (returned unchanged)
-        pub fn remove_liquidity(&mut self, liquidity_receipt_bucket: Bucket) -> (Bucket, Bucket) {
-            assert!(liquidity_receipt_bucket.resource_address() == self.liquidity_receipt.address(), "Bucket must contain Liquify liquidity receipt(s)");
+/// Removes liquidity and returns XRD to the provider.
+/// 
+/// This method allows liquidity providers to withdraw their available XRD liquidity. Only XRD that
+/// hasn't been used to fill orders can be withdrawn - any fills must be collected separately.
+/// If the position has auto_refill enabled, it will be disabled and removed from automation tracking.
+/// The position is removed from the buy list order book and the liquidity index is updated. Multiple
+/// receipts can be processed in a single transaction.
+/// 
+/// # Arguments
+/// * `liquidity_receipt_bucket`: A `Bucket` containing one or more liquidity receipt NFTs
+///
+/// # Returns
+/// * A tuple containing:
+///   - `Bucket`: The withdrawn XRD from all provided receipts
+///   - `Bucket`: The liquidity receipt NFTs (returned unchanged)
+pub fn remove_liquidity(&mut self, liquidity_receipt_bucket: Bucket) -> (Bucket, Bucket) {
+    assert!(liquidity_receipt_bucket.resource_address() == self.liquidity_receipt.address(), "Bucket must contain Liquify liquidity receipt(s)");
 
-            for local_id in liquidity_receipt_bucket.as_non_fungible().non_fungible_local_ids() {
-                let global_id = NonFungibleGlobalId::new(self.liquidity_receipt.address(), local_id.clone());
-                let kvs_data = self.liquidity_data.get(&global_id).unwrap();
-                assert!(kvs_data.xrd_liquidity_available > dec!(0), "No liquidity available to remove");
-            }
+    // First pass: Collect all data and validate
+    let mut removal_data: Vec<(NonFungibleLocalId, NonFungibleGlobalId, LiquidityReceipt, Decimal, Decimal, usize)> = Vec::new();
+    let mut total_order_size = Decimal::ZERO;
+    
+    for local_id in liquidity_receipt_bucket.as_non_fungible().non_fungible_local_ids() {
+        let global_id = NonFungibleGlobalId::new(self.liquidity_receipt.address(), local_id.clone());
+        let kvs_data = self.liquidity_data.get(&global_id).unwrap();
+        assert!(kvs_data.xrd_liquidity_available > dec!(0), "No liquidity available to remove");
+        
+        let nft_data: LiquidityReceipt = self.liquidity_receipt.get_non_fungible_data(&local_id);
+        let order_size = kvs_data.xrd_liquidity_available;
+        let discount = nft_data.discount;
+        let index = (discount / dec!(0.00025)).checked_floor().unwrap().to_string().parse::<usize>().unwrap();
+        
+        removal_data.push((local_id.clone(), global_id, nft_data, order_size, discount, index));
+        total_order_size += order_size;
+    }
 
-            let mut total_order_size: Decimal = Decimal::ZERO;
-
-            for local_id in liquidity_receipt_bucket.as_non_fungible().non_fungible_local_ids() {
-                let nft_data: LiquidityReceipt = self.liquidity_receipt.get_non_fungible_data(&local_id);
-                let global_id = NonFungibleGlobalId::new(self.liquidity_receipt.address(), local_id.clone());
-                let mut kvs_data = self.liquidity_data.get_mut(&global_id).unwrap();
-                let discount = nft_data.discount;
-                let order_size = kvs_data.xrd_liquidity_available;
-
-                // If this order was automated, disable automation and remove from tracking
-                if nft_data.auto_refill {
-                    self.liquidity_receipt.update_non_fungible_data(&local_id, "auto_refill", false);
-                    
-                    // Find and remove from automated tracking
-                    let mut target_index = None;
-                    let mut last_entry_data = None;
-                    
-                    // First pass: find the target and get last entry data if needed
-                    for i in 1..self.automated_liquidity_index {
-                        if let Some(stored_global_id) = self.automated_liquidity.get(&i) {
-                            if *stored_global_id == global_id {
-                                target_index = Some(i);
-                            }
-                            // Store the last entry data
-                            if i == self.automated_liquidity_index - 1 {
-                                last_entry_data = Some(stored_global_id.clone());
-                            }
-                        }
-                    }
-                    
-                    // Now do the removal and reshuffling
-                    if let Some(index_to_remove) = target_index {
-                        let last_index = self.automated_liquidity_index - 1;
-                        
-                        if index_to_remove == last_index {
-                            // Removing the last entry - simple case
-                            self.automated_liquidity.remove(&index_to_remove);
-                        } else {
-                            // Not the last entry - need to move last to fill gap
-                            // Remove the target entry
-                            self.automated_liquidity.remove(&index_to_remove);
-                            
-                            if let Some(last_entry) = last_entry_data {
-                                // Remove from last position
-                                self.automated_liquidity.remove(&last_index);
-                                // Insert at the gap position
-                                self.automated_liquidity.insert(index_to_remove, last_entry);
-                            }
-                        }
-                        
-                        self.automated_liquidity_index -= 1;
-                    }
-                }
-
-                let index = (discount / dec!(0.00025)).checked_floor().unwrap().to_string().parse::<usize>().unwrap();
-                self.liquidity_index[index] -= order_size;
-
-                // Find and remove from buy list
-                let mut key_to_remove = None;
-                for (key, tree_global_id, _) in self.buy_list.range(0..u128::MAX) {
-                    if tree_global_id == global_id {
-                        key_to_remove = Some(key);
-                        break;
-                    }
-                }
-                
-                if let Some(key) = key_to_remove {
-                    self.buy_list.remove(&key);
-                }
-
-                kvs_data.xrd_liquidity_available = dec!(0);
-                total_order_size += order_size;
-            }
-
-            let xrd_bucket = self.xrd_liquidity.take(total_order_size);
-            self.total_xrd_locked -= total_order_size;
-
-            // Emit events
-            for local_id in liquidity_receipt_bucket.as_non_fungible().non_fungible_local_ids() {
-                Runtime::emit_event(LiquidityRemovedEvent {
-                    receipt_id: local_id,
-                    xrd_amount: total_order_size,
-                });
-            }
-
-            (xrd_bucket, liquidity_receipt_bucket)
+    // Second pass: Update NFT data for auto_refill receipts
+    let mut automated_removals: Vec<NonFungibleGlobalId> = Vec::new();
+    for (local_id, global_id, nft_data, _, _, _) in &removal_data {
+        if nft_data.auto_refill {
+            self.liquidity_receipt.update_non_fungible_data(local_id, "auto_refill", false);
+            automated_removals.push(global_id.clone());
         }
+    }
+
+    // Third pass: Remove from automated liquidity tracking
+    for global_id_to_remove in automated_removals {
+        let mut target_index = None;
+        let mut last_entry_data = None;
+        
+        // Find the target and get last entry data if needed
+        for i in 1..self.automated_liquidity_index {
+            if let Some(stored_global_id) = self.automated_liquidity.get(&i) {
+                if *stored_global_id == global_id_to_remove {
+                    target_index = Some(i);
+                }
+                // Store the last entry data
+                if i == self.automated_liquidity_index - 1 {
+                    last_entry_data = Some(stored_global_id.clone());
+                }
+            }
+        }
+        
+        // Now do the removal and reshuffling
+        if let Some(index_to_remove) = target_index {
+            let last_index = self.automated_liquidity_index - 1;
+            
+            if index_to_remove == last_index {
+                // Removing the last entry - simple case
+                self.automated_liquidity.remove(&index_to_remove);
+            } else {
+                // Not the last entry - need to move last to fill gap
+                // Remove the target entry
+                self.automated_liquidity.remove(&index_to_remove);
+                
+                if let Some(last_entry) = last_entry_data {
+                    // Remove from last position
+                    self.automated_liquidity.remove(&last_index);
+                    // Insert at the gap position
+                    self.automated_liquidity.insert(index_to_remove, last_entry);
+                }
+            }
+            
+            self.automated_liquidity_index -= 1;
+        }
+    }
+
+    // Fourth pass: Update liquidity index
+    for (_, _, _, order_size, _, index) in &removal_data {
+        self.liquidity_index[*index] -= *order_size;
+    }
+
+    // Fifth pass: Find all keys to remove from buy list
+    let mut keys_to_remove: Vec<u128> = Vec::new();
+    for (_, global_id, _, _, _, _) in &removal_data {
+        for (key, tree_global_id, _) in self.buy_list.range(0..u128::MAX) {
+            if tree_global_id == global_id.clone() {
+                keys_to_remove.push(key);
+                break;
+            }
+        }
+    }
+
+    // Remove from buy list
+    for key in keys_to_remove {
+        self.buy_list.remove(&key);
+    }
+
+    // Sixth pass: Update KVS data
+    for (_, global_id, _, _, _, _) in &removal_data {
+        let mut kvs_data = self.liquidity_data.get_mut(global_id).unwrap();
+        kvs_data.xrd_liquidity_available = dec!(0);
+    }
+
+    // Take XRD from vault
+    let xrd_bucket = self.xrd_liquidity.take(total_order_size);
+    self.total_xrd_locked -= total_order_size;
+
+    // Emit events
+    for (local_id, _, _, order_size, _, _) in removal_data {
+        Runtime::emit_event(LiquidityRemovedEvent {
+            receipt_id: local_id,
+            xrd_amount: order_size,
+        });
+    }
+
+    (xrd_bucket, liquidity_receipt_bucket)
+}
 
         /// Processes LSU unstaking using on-ledger order matching.
         /// 
