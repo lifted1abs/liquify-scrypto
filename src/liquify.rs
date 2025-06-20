@@ -807,6 +807,7 @@ mod liquify_module {
         }
 
 
+        
 /// Removes liquidity and returns XRD to the provider.
 /// 
 /// This method allows liquidity providers to withdraw their available XRD liquidity. Only XRD that
