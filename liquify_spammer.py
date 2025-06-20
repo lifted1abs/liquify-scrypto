@@ -58,52 +58,6 @@ async def load_config():
         print(f"Error: Configuration file not found at {config_path}")
         exit(1)
 
-async def check_dev_address_receipts(spammer_info: SpammerInfo):
-    """Check how many liquidity receipts are at the DEV_ADDRESS"""
-    # Get the liquidity receipt resource from config
-    liquidity_receipt = spammer_info.config.get('LIQUIFY_LIQUIDITY_RECEIPT', '')
-    
-    if not liquidity_receipt:
-        print("No liquidity receipt address found in config")
-        return
-    
-    # Query the account details
-    result = await perform_request(
-        spammer_info,
-        "/state/entity/details",
-        json.dumps({
-            "addresses": [DEV_ADDRESS],
-            "aggregation_level": "Vault"
-        })
-    )
-    
-    print(f"\n=== Checking receipts at {DEV_ADDRESS} ===")
-    
-    if "items" in result and len(result["items"]) > 0:
-        entity = result["items"][0]
-        if "fungible_resources" in entity:
-            for resource in entity["fungible_resources"]["items"]:
-                if resource["resource_address"] == liquidity_receipt:
-                    print(f"✓ Found liquidity receipts!")
-                    print(f"  Amount: {resource['amount']}")
-                    return
-        
-        if "non_fungible_resources" in entity:
-            for resource in entity["non_fungible_resources"]["items"]:
-                if resource["resource_address"] == liquidity_receipt:
-                    print(f"✓ Found liquidity receipt NFTs!")
-                    print(f"  Count: {resource['amount']}")
-                    # Get the NFT IDs if available
-                    if "vaults" in entity and "items" in entity["vaults"]:
-                        for vault in entity["vaults"]["items"]:
-                            if vault.get("resource_address") == liquidity_receipt:
-                                print(f"  Vault address: {vault.get('vault_address', 'unknown')}")
-                                if "items" in vault:
-                                    print(f"  NFT IDs: {[item['id'] for item in vault['items']]}")
-                    return
-    
-    print(f"✗ No liquidity receipts found at {DEV_ADDRESS}")
-
 async def main():
     print("This process has the PID", os.getpid())
 
@@ -132,7 +86,7 @@ async def main():
     print(f"Using LIQUIFY_LIQUIDITY_RECEIPT: {config.get('LIQUIFY_LIQUIDITY_RECEIPT', 'Not found')}")
 
     # Check what we should do
-    choice = int(input("Choose:\n1) Get funds from faucet\n2) Spam liquidity\n3) Spam unstakes\n4) Check DEV_ADDRESS receipts\n"))
+    choice = int(input("Choose:\n1) Get funds from faucet\n2) Spam liquidity\n3) Spam unstakes\n"))
 
     # Get funds
     if choice == 1:
@@ -147,24 +101,49 @@ async def main():
 
     # Spam liquidity
     if choice == 2:
-        amount_spammed = int(input("\nAmount spammed already: "))
+        # Get total amount to spam
+        total_to_spam = int(input("\nHow much XRD to spam in total? "))
         
-        # New submenu for amount type
-        amount_type = int(input("\nChoose amount type:\n1) Random amounts\n2) Set amount\n"))
+        # Amount type submenu
+        amount_type = int(input("\nChoose amount type:\n1) Random amounts (10k-100k XRD)\n2) Set amount\n"))
         
         if amount_type == 2:
             # Set amount option
             set_amount = int(input("\nEnter set amount for each transaction (XRD): "))
-            print(f"Will use {set_amount} XRD for each transaction")
+            print(f"Will use {set_amount:,} XRD for each transaction")
         else:
             # Random amount (default)
             set_amount = None
             print("Will use random amounts between 10,000 and 100,000 XRD")
         
+        # Discount type submenu
+        discount_type = int(input("\nChoose discount type:\n1) Random discount (0.5-1.5%)\n2) Set discount\n"))
+        
+        if discount_type == 2:
+            # Set discount option
+            set_discount = float(input("\nEnter discount percentage (e.g., 1.25 for 1.25%): "))
+            print(f"Will use {set_discount}% discount for all transactions")
+        else:
+            # Random discount (default)
+            set_discount = None
+            print("Will use random discounts between 0.5% and 1.5%")
+        
+        # Auto unstake submenu
+        auto_unstake_choice = int(input("\nChoose auto unstake setting:\n1) auto_unstake = true (with auto_refill = true)\n2) auto_unstake = false (with auto_refill = false)\n"))
+        
+        if auto_unstake_choice == 1:
+            auto_unstake = True
+            auto_refill = True
+            print("Will use auto_unstake=true, auto_refill=true, threshold=10000")
+        else:
+            auto_unstake = False
+            auto_refill = False
+            print("Will use auto_unstake=false, auto_refill=false, threshold=10000")
+        
         start_spamming_question = input("\n!! Double-check your input !!\n\nStart spamming liquidity? y/n: ")
     
         if (start_spamming_question.lower() == "y"):
-            await start_spamming_liquidity(spammer_info, amount_spammed, set_amount)
+            await start_spamming_liquidity(spammer_info, total_to_spam, set_amount, set_discount, auto_unstake, auto_refill)
         else:
             print("Exiting now.")
             exit()  
@@ -206,10 +185,6 @@ async def main():
             print("Exiting now.")
             exit()     
 
-    # Check DEV_ADDRESS receipts
-    if choice == 4:
-        await check_dev_address_receipts(spammer_info)
-
 #
 # Get funds from the faucet (10k at a time)
 #
@@ -242,41 +217,44 @@ async def start_getting_funds(spammer_info: SpammerInfo, account) -> None:
 
         await asyncio.sleep(0.5)    
 
-async def start_spamming_liquidity(spammer_info: SpammerInfo, amount_spammed = 0, set_amount = None) -> None:
+async def start_spamming_liquidity(spammer_info: SpammerInfo, total_to_spam: int, set_amount = None, set_discount = None, auto_unstake = True, auto_refill = True) -> None:
     spammer_info.current_epoch = await get_current_epoch(spammer_info)
 
-    print(f"Start spamming assuming {amount_spammed} XRD in liquidity already provided...")
-    print("IMPORTANT: All transactions will use auto_unstake=true, auto_refill=true, threshold=10000")
+    print(f"Starting to spam {total_to_spam:,} XRD in total...")
+    print(f"Settings: auto_unstake={auto_unstake}, auto_refill={auto_refill}, threshold=10000")
     
-    # Debug output for the set amount
-    if set_amount is not None:
-        print(f"Using fixed amount of {set_amount} XRD for each transaction")
-    else:
-        print("Using random amounts between 10,000 and 100,000 XRD")
+    amount_spammed = 0
+    refill_threshold = 10000  # Always hardcoded to 10000
 
-    while amount_spammed < 100_000_000:
-        # Build manifest
-        discount = random.randrange(500, 1_500, 25) # 0.5-1.5% with steps of 0.025%
-        
-        # Use set_amount if provided, otherwise generate random amount
-        if set_amount is not None:
-            amount = set_amount
+    while amount_spammed < total_to_spam:
+        # Calculate discount
+        if set_discount is not None:
+            discount = int(set_discount * 1000)  # Convert percentage to basis points (e.g., 1.25% -> 1250)
         else:
-            amount = random.randrange(10_000, 100_000) # 10k - 100k
-            
-        # ALWAYS use these values
-        auto_unstake = True
-        auto_refill = True
-        refill_threshold = 10000
+            discount = random.randrange(500, 1_500, 25)  # 0.5-1.5% with steps of 0.025%
+        
+        # Calculate amount for this transaction
+        remaining = total_to_spam - amount_spammed
+        
+        if set_amount is not None:
+            # Use set amount unless it would exceed total
+            amount = min(set_amount, remaining)
+        else:
+            # Random amount between 10k-100k, but not exceeding remaining
+            max_random = min(100_000, remaining)
+            if max_random < 10_000:
+                amount = remaining  # Just use whatever's left if it's less than 10k
+            else:
+                amount = random.randrange(10_000, max_random + 1)
 
         # Get Liquify component and receipt from config
         liquify_component = spammer_info.config.get('LIQUIFY_COMPONENT', '')
         liquidity_receipt = spammer_info.config.get('LIQUIFY_LIQUIDITY_RECEIPT', '')
 
         # Debug output before building manifest
-        print(f"Preparing to add {amount} XRD with {discount/1000:.3f}% discount, auto_unstake=true, auto_refill=true, threshold=10000")
+        print(f"Preparing to add {amount} XRD with {discount/1000:.3f}% discount, auto_unstake={auto_unstake}, auto_refill={auto_refill}, threshold={refill_threshold}")
         
-        # Create the manifest with fixed parameters
+        # Create the manifest with the specified parameters
         manifest_string = f"""
         CALL_METHOD
             Address("component_tdx_2_1cptxxxxxxxxxfaucetxxxxxxxxx000527798379xxxxxxxxxyulkzl")
@@ -298,9 +276,9 @@ async def start_spamming_liquidity(spammer_info: SpammerInfo, amount_spammed = 0
             "add_liquidity"
             Bucket("xrd_bucket")
             Decimal("0.{discount:05}")
-            true
-            true
-            Decimal("10000")
+            {"true" if auto_unstake else "false"}
+            {"true" if auto_refill else "false"}
+            Decimal("{refill_threshold}")
         ;
         TAKE_ALL_FROM_WORKTOP
             Address("{liquidity_receipt}")
@@ -335,7 +313,7 @@ async def start_spamming_liquidity(spammer_info: SpammerInfo, amount_spammed = 0
                 spammer_info
             )
 
-            print(f"{get_timestamp()}: {signed_transaction.intent_hash().as_str()} - Using account {spammer_info.account.as_str()} to provide {amount} XRD of liquidity with a discount of {discount / 1000}%, auto_unstake=true, auto_refill=true. Receipt will be sent to {DEV_ADDRESS}")
+            print(f"{get_timestamp()}: {signed_transaction.intent_hash().as_str()} - Using account {spammer_info.account.as_str()} to provide {amount} XRD of liquidity with a discount of {discount / 1000}%, auto_unstake={auto_unstake}, auto_refill={auto_refill}. Receipt will be sent to {DEV_ADDRESS}")
             
             # Submit transaction
             await submit_transaction(
@@ -343,9 +321,9 @@ async def start_spamming_liquidity(spammer_info: SpammerInfo, amount_spammed = 0
                 spammer_info
             )
 
-            # Increment the total amount spammed so we eventually reach our stop
+            # Increment the total amount spammed
             amount_spammed += amount
-            print(f"Total amount spammed: {amount_spammed} XRD")
+            print(f"Total amount spammed: {amount_spammed:,} / {total_to_spam:,} XRD")
 
         except Exception as e:
             print(f"Error during transaction: {str(e)}")
@@ -355,10 +333,7 @@ async def start_spamming_liquidity(spammer_info: SpammerInfo, amount_spammed = 0
 
         await asyncio.sleep(0.5)
 
-    print(f"Done spamming")
-    
-    # Check receipts at DEV_ADDRESS
-    await check_dev_address_receipts(spammer_info)
+    print(f"Done spamming {amount_spammed:,} XRD")
     exit()
 
 #
