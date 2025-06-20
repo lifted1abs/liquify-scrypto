@@ -24,7 +24,6 @@ pub struct ReceiptDetailData {
     pub fills_to_collect: u64,
     pub last_added_epoch: u32,
     pub claimable_xrd: Decimal,
-    pub total_fills: u64,
     pub total_stake_claim_value: Decimal,
     pub total_lsu_redemption_value: Decimal,
 }
@@ -33,7 +32,7 @@ pub struct ReceiptDetailData {
 pub struct AutomationReadyReceipt {
     pub receipt_id: NonFungibleLocalId,
     pub discount: Decimal,
-    pub total_fills: u64,
+    pub fills_to_collect: u64,
     pub claimable_xrd: Decimal,
     pub refill_threshold: Decimal,
 }
@@ -537,10 +536,6 @@ mod liquify_module {
             
             receipt_bucket
         }
-
-
-
-
 
         pub fn update_auto_refill_status(&mut self, receipt_bucket: Bucket, auto_refill: bool) -> Bucket {
             assert!(receipt_bucket.resource_address() == self.liquidity_receipt.address(), "Bucket must contain Liquify liquidity receipt");
@@ -1472,7 +1467,6 @@ pub fn remove_liquidity(&mut self, liquidity_receipt_bucket: Bucket) -> (Bucket,
                 fills_to_collect,
                 last_added_epoch,
                 claimable_xrd,
-                total_fills,
                 total_stake_claim_value,
                 total_lsu_redemption_value,
             }
@@ -1491,14 +1485,14 @@ pub fn remove_liquidity(&mut self, liquidity_receipt_bucket: Bucket) -> (Bucket,
                     let nft_data: LiquidityReceipt = self.liquidity_receipt.get_non_fungible_data(&receipt_id);
                     
                     // Calculate claimable XRD (only need first value)
-                    let (claimable_xrd, total_fills, _, _) = self.calculate_claimable_xrd(&receipt_id);
+                    let (claimable_xrd, fills_to_collect, _, _) = self.calculate_claimable_xrd(&receipt_id);
                     
                     if claimable_xrd >= nft_data.refill_threshold {
                         
                         ready_receipts.push(AutomationReadyReceipt {
                             receipt_id,
                             discount: nft_data.discount,
-                            total_fills,
+                            fills_to_collect,
                             claimable_xrd,
                             refill_threshold: nft_data.refill_threshold,
                         });
