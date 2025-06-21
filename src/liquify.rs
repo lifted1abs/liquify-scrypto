@@ -128,9 +128,9 @@ pub struct CombinedKey {
 }
 
 impl CombinedKey {
-    pub fn new(discount_u64: u64, epoch: u32, liquidity_id: u64) -> Self {
-        // Pack: discount (16 bits) | epoch (32 bits) | liquidity_id (64 bits)
-        let key = ((discount_u64 as u128) << 96) | ((epoch as u128) << 64) | (liquidity_id as u128);
+    pub fn new(discount_u64: u64, position: u64, liquidity_id: u64) -> Self {
+        // Pack: discount (16 bits) | position (48 bits) | liquidity_id (64 bits)
+        let key = ((discount_u64 as u128) << 112) | ((position as u128) << 64) | (liquidity_id as u128);
         CombinedKey { key }
     }
 }
@@ -212,6 +212,7 @@ mod liquify_module {
         total_xrd_locked: Decimal,
         component_status: bool,
         order_fill_counter: u64,
+        avl_position_counter: u64,  
         liquidity_index: Vec<Decimal>,
         discounts: Vec<Decimal>,
         platform_fee: Decimal,
@@ -299,6 +300,7 @@ mod liquify_module {
                 xrd_liquidity: Vault::new(XRD),
                 liquidity_receipt,
                 liquidity_receipt_counter: 1,
+                avl_position_counter: 1,
                 buy_list: AvlTree::new(),
                 order_fill_tree: AvlTree::new(),
                 component_vaults: KeyValueStore::new_with_registered_type(),
@@ -401,7 +403,8 @@ mod liquify_module {
         
             let discount_u64 = (discount * dec!(10000)).checked_floor().unwrap().to_string().parse::<u64>().unwrap();
             let current_epoch = Runtime::current_epoch().number() as u32;
-            let combined_key = CombinedKey::new(discount_u64, current_epoch, self.liquidity_receipt_counter);
+            let combined_key = CombinedKey::new(discount_u64, self.avl_position_counter, self.liquidity_receipt_counter);
+            self.avl_position_counter += 1;
             let id = NonFungibleLocalId::Integer(IntegerNonFungibleLocalId::new(self.liquidity_receipt_counter));
 
             // Mint NFT with immutable + automation data
@@ -514,9 +517,12 @@ mod liquify_module {
             let current_epoch = Runtime::current_epoch().number() as u32;
             kvs_data.last_added_epoch = current_epoch;
             
-            // Create new key with current epoch (puts it at back of queue for same discount/epoch)
-            let new_combined_key = CombinedKey::new(discount_u64, current_epoch, self.liquidity_receipt_counter);
-            self.liquidity_receipt_counter += 1;
+            let receipt_id_u64 = match local_id.clone() {
+                NonFungibleLocalId::Integer(i) => i.value(),
+                _ => panic!("Invalid NFT ID type")
+            };
+            let new_combined_key = CombinedKey::new(discount_u64, self.avl_position_counter, receipt_id_u64);
+            self.avl_position_counter += 1;
             
             // Reinsert at new position
             self.buy_list.insert(new_combined_key.key, global_id.clone());
@@ -700,7 +706,7 @@ mod liquify_module {
                 
                 // Process fills for this receipt
                 let start_key = CombinedKey::new(receipt_id_u64, 1, 0).key;
-                let end_key = CombinedKey::new(receipt_id_u64, u32::MAX, 0).key;
+                let end_key = CombinedKey::new(receipt_id_u64, u64::MAX, 0).key;
                 
                 // Collect keys and data first, then process
                 let mut fills_to_process = Vec::new();
