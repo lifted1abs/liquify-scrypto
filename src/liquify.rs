@@ -122,16 +122,30 @@ struct RefillThresholdUpdatedEvent {
     refill_threshold: Decimal,
 }
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Debug)]
-pub struct CombinedKey {
-    key: u128,
+// #[derive(PartialEq, Eq, PartialOrd, Ord, Debug)]
+// pub struct CombinedKey {
+//     key: u128,
+// }
+
+pub struct BuyListKey;
+
+impl BuyListKey {
+    pub fn new(discount_basis_points: u32, position: u64, receipt_id: u32) -> u128 {
+        // Pack: discount (32 bits) | position (64 bits) | receipt_id (32 bits) = 128 bits
+        ((discount_basis_points as u128) << 96) | 
+        ((position as u128) << 32) | 
+        (receipt_id as u128)
+    }
 }
 
-impl CombinedKey {
-    pub fn new(discount_u64: u64, position: u64, liquidity_id: u64) -> Self {
-        // Pack: discount (16 bits) | position (48 bits) | liquidity_id (64 bits)
-        let key = ((discount_u64 as u128) << 112) | ((position as u128) << 64) | (liquidity_id as u128);
-        CombinedKey { key }
+pub struct OrderFillKey;
+
+impl OrderFillKey {
+    pub fn new(receipt_id: u64, fill_number: u32, reserved: u32) -> u128 {
+        // Pack: receipt_id (64 bits) | fill_number (32 bits) | reserved (32 bits) = 128 bits
+        ((receipt_id as u128) << 64) | 
+        ((fill_number as u128) << 32) |
+        (reserved as u128)
     }
 }
 
@@ -400,11 +414,21 @@ mod liquify_module {
                 assert!(auto_unstake, "Auto refill can only be enabled when auto unstake is enabled");
                 assert!(refill_threshold >= self.minimum_refill_threshold, "Refill threshold is below required minimum");
             }
-        
-            let discount_u64 = (discount * dec!(10000)).checked_floor().unwrap().to_string().parse::<u64>().unwrap();
-            let current_epoch = Runtime::current_epoch().number() as u32;
-            let combined_key = CombinedKey::new(discount_u64, self.avl_position_counter, self.liquidity_receipt_counter);
-            self.avl_position_counter += 1;
+
+            // Convert discount to basis points for the key
+            let discount_basis_points = match (discount * dec!(10000)).checked_floor() {
+                Some(val) => match val.to_string().parse::<u32>() {
+                    Ok(points) => points,
+                    Err(_) => panic!("Failed to parse discount basis points")
+                },
+                None => panic!("Failed to convert discount to basis points")
+            };
+            
+            // Create buy list key with new structure - using position counter, not epoch!
+            let receipt_id_u32 = self.liquidity_receipt_counter as u32;  // Cast to u32
+            let buy_list_key = BuyListKey::new(discount_basis_points, self.avl_position_counter, receipt_id_u32);
+            self.avl_position_counter += 1;  // Increment position counter
+            
             let id = NonFungibleLocalId::Integer(IntegerNonFungibleLocalId::new(self.liquidity_receipt_counter));
 
             // Mint NFT with immutable + automation data
@@ -415,16 +439,16 @@ mod liquify_module {
                 auto_refill,
                 refill_threshold,
             };
-        
+
             let new_liquidity_receipt: NonFungibleBucket = self.liquidity_receipt.mint_non_fungible(&id, liquidity_receipt_data);
             
-            // Store mutable data in KVS
+            // Store mutable data in KVS - still track epoch for informational purposes
             let global_id = NonFungibleGlobalId::new(self.liquidity_receipt.address(), id);
             let liquidity_data = LiquidityData {
                 xrd_liquidity_filled: dec!(0),
                 xrd_liquidity_available: xrd_bucket.amount(),
                 fills_to_collect: 0,
-                last_added_epoch: current_epoch,
+                last_added_epoch: Runtime::current_epoch().number() as u32,  // Keep for info only
             };
             self.liquidity_data.insert(global_id.clone(), liquidity_data);
             
@@ -435,9 +459,10 @@ mod liquify_module {
             }
             
             self.liquidity_receipt_counter += 1;
-        
-            self.buy_list.insert(combined_key.key, global_id.clone());
-        
+
+            // Use the new buy list key
+            self.buy_list.insert(buy_list_key, global_id.clone());
+
             let index_usize = match (discount / dec!(0.00025)).checked_floor().unwrap().to_string().parse::<usize>() {
                 Ok(index) => index,
                 Err(_) => panic!("Failed to calculate liquidity index for discount: {}", discount),
@@ -445,7 +470,7 @@ mod liquify_module {
 
             let currently_liquidity_at_discount = self.liquidity_index[index_usize];
             self.liquidity_index[index_usize] = currently_liquidity_at_discount + xrd_bucket.amount();
-        
+
             self.total_xrd_locked += xrd_bucket.amount();
             
             Runtime::emit_event(LiquidityAddedEvent {
@@ -458,7 +483,7 @@ mod liquify_module {
             });
 
             self.xrd_liquidity.put(xrd_bucket);
-        
+
             new_liquidity_receipt
         }
 
@@ -495,8 +520,14 @@ mod liquify_module {
             // Store the amount for the event before consuming the bucket
             let additional_xrd_amount = xrd_bucket.amount();
             
-            // Get current discount
-            let discount_u64 = (nft_data.discount * dec!(10000)).checked_floor().unwrap().to_string().parse::<u64>().unwrap();
+            // Get discount for the key
+            let discount_basis_points = match (nft_data.discount * dec!(10000)).checked_floor() {
+                Some(val) => match val.to_string().parse::<u32>() {
+                    Ok(points) => points,
+                    Err(_) => panic!("Failed to parse discount basis points")
+                },
+                None => panic!("Failed to convert discount to basis points")
+            };
             
             // Find and remove from old position
             let mut key_to_remove = None;
@@ -517,15 +548,16 @@ mod liquify_module {
             let current_epoch = Runtime::current_epoch().number() as u32;
             kvs_data.last_added_epoch = current_epoch;
             
-            let receipt_id_u64 = match local_id.clone() {
-                NonFungibleLocalId::Integer(i) => i.value(),
+            // Create new key with updated position counter
+            let receipt_id_u32 = match local_id.clone() {
+                NonFungibleLocalId::Integer(i) => i.value() as u32,
                 _ => panic!("Invalid NFT ID type")
             };
-            let new_combined_key = CombinedKey::new(discount_u64, self.avl_position_counter, receipt_id_u64);
+            let new_buy_list_key = BuyListKey::new(discount_basis_points, self.avl_position_counter, receipt_id_u32);
             self.avl_position_counter += 1;
             
             // Reinsert at new position
-            self.buy_list.insert(new_combined_key.key, global_id.clone());
+            self.buy_list.insert(new_buy_list_key, global_id.clone());
             
             // Update liquidity index
             let index_usize = (nft_data.discount / dec!(0.00025)).checked_floor().unwrap().to_string().parse::<usize>().unwrap();
@@ -704,9 +736,9 @@ mod liquify_module {
                     _ => panic!("Invalid NFT ID type")
                 };
                 
-                // Process fills for this receipt
-                let start_key = CombinedKey::new(receipt_id_u64, 1, 0).key;
-                let end_key = CombinedKey::new(receipt_id_u64, u64::MAX, 0).key;
+                // Process fills for this receipt using OrderFillKey
+                let start_key = OrderFillKey::new(receipt_id_u64, 1, 0);
+                let end_key = OrderFillKey::new(receipt_id_u64, u32::MAX, 0);
                 
                 // Collect keys and data first, then process
                 let mut fills_to_process = Vec::new();
@@ -773,13 +805,21 @@ mod liquify_module {
                 let current_epoch = Runtime::current_epoch().number() as u32;
                 kvs_data.last_added_epoch = current_epoch;
                 
-                // Create new key with current epoch
-                let discount_u64 = (discount * dec!(10000)).checked_floor().unwrap().to_string().parse::<u64>().unwrap();
-                let new_combined_key = CombinedKey::new(discount_u64, current_epoch, self.liquidity_receipt_counter);
-                self.liquidity_receipt_counter += 1;
+                // Create new key with new position
+                let discount_basis_points = match (discount * dec!(10000)).checked_floor() {
+                    Some(val) => match val.to_string().parse::<u32>() {
+                        Ok(points) => points,
+                        Err(_) => panic!("Failed to parse discount basis points")
+                    },
+                    None => panic!("Failed to convert discount to basis points")
+                };
+                
+                let receipt_id_u32 = receipt_id_u64 as u32;  // Cast to u32 for BuyListKey
+                let new_buy_list_key = BuyListKey::new(discount_basis_points, self.avl_position_counter, receipt_id_u32);
+                self.avl_position_counter += 1;
                 
                 // Reinsert at new position
-                self.buy_list.insert(new_combined_key.key, global_id);
+                self.buy_list.insert(new_buy_list_key, global_id);
                 
                 // Update liquidity index
                 let index_usize = (discount / dec!(0.00025)).checked_floor().unwrap().to_string().parse::<usize>().unwrap();
@@ -805,134 +845,134 @@ mod liquify_module {
 
 
 
-/// Removes liquidity and returns XRD to the provider.
-/// 
-/// This method allows liquidity providers to withdraw their available XRD liquidity. Only XRD that
-/// hasn't been used to fill orders can be withdrawn - any fills must be collected separately.
-/// If the position has auto_refill enabled, it will be disabled and removed from automation tracking.
-/// The position is removed from the buy list order book and the liquidity index is updated. Multiple
-/// receipts can be processed in a single transaction.
-/// 
-/// # Arguments
-/// * `liquidity_receipt_bucket`: A `Bucket` containing one or more liquidity receipt NFTs
-///
-/// # Returns
-/// * A tuple containing:
-///   - `Bucket`: The withdrawn XRD from all provided receipts
-///   - `Bucket`: The liquidity receipt NFTs (returned unchanged)
-pub fn remove_liquidity(&mut self, liquidity_receipt_bucket: Bucket) -> (Bucket, Bucket) {
-    assert!(liquidity_receipt_bucket.resource_address() == self.liquidity_receipt.address(), "Bucket must contain Liquify liquidity receipt(s)");
+        /// Removes liquidity and returns XRD to the provider.
+        /// 
+        /// This method allows liquidity providers to withdraw their available XRD liquidity. Only XRD that
+        /// hasn't been used to fill orders can be withdrawn - any fills must be collected separately.
+        /// If the position has auto_refill enabled, it will be disabled and removed from automation tracking.
+        /// The position is removed from the buy list order book and the liquidity index is updated. Multiple
+        /// receipts can be processed in a single transaction.
+        /// 
+        /// # Arguments
+        /// * `liquidity_receipt_bucket`: A `Bucket` containing one or more liquidity receipt NFTs
+        ///
+        /// # Returns
+        /// * A tuple containing:
+        ///   - `Bucket`: The withdrawn XRD from all provided receipts
+        ///   - `Bucket`: The liquidity receipt NFTs (returned unchanged)
+        pub fn remove_liquidity(&mut self, liquidity_receipt_bucket: Bucket) -> (Bucket, Bucket) {
+            assert!(liquidity_receipt_bucket.resource_address() == self.liquidity_receipt.address(), "Bucket must contain Liquify liquidity receipt(s)");
 
-    // First pass: Collect all data and validate
-    let mut removal_data: Vec<(NonFungibleLocalId, NonFungibleGlobalId, LiquidityReceipt, Decimal, Decimal, usize)> = Vec::new();
-    let mut total_order_size = Decimal::ZERO;
-    
-    for local_id in liquidity_receipt_bucket.as_non_fungible().non_fungible_local_ids() {
-        let global_id = NonFungibleGlobalId::new(self.liquidity_receipt.address(), local_id.clone());
-        let kvs_data = self.liquidity_data.get(&global_id).unwrap();
-        assert!(kvs_data.xrd_liquidity_available > dec!(0), "No liquidity available to remove");
-        
-        let nft_data: LiquidityReceipt = self.liquidity_receipt.get_non_fungible_data(&local_id);
-        let order_size = kvs_data.xrd_liquidity_available;
-        let discount = nft_data.discount;
-        let index = (discount / dec!(0.00025)).checked_floor().unwrap().to_string().parse::<usize>().unwrap();
-        
-        removal_data.push((local_id.clone(), global_id, nft_data, order_size, discount, index));
-        total_order_size += order_size;
-    }
-
-    // Second pass: Update NFT data for auto_refill receipts
-    let mut automated_removals: Vec<NonFungibleGlobalId> = Vec::new();
-    for (local_id, global_id, nft_data, _, _, _) in &removal_data {
-        if nft_data.auto_refill {
-            self.liquidity_receipt.update_non_fungible_data(local_id, "auto_refill", false);
-            automated_removals.push(global_id.clone());
-        }
-    }
-
-    // Third pass: Remove from automated liquidity tracking
-    for global_id_to_remove in automated_removals {
-        let mut target_index = None;
-        let mut last_entry_data = None;
-        
-        // Find the target and get last entry data if needed
-        for i in 1..self.automated_liquidity_index {
-            if let Some(stored_global_id) = self.automated_liquidity.get(&i) {
-                if *stored_global_id == global_id_to_remove {
-                    target_index = Some(i);
-                }
-                // Store the last entry data
-                if i == self.automated_liquidity_index - 1 {
-                    last_entry_data = Some(stored_global_id.clone());
-                }
-            }
-        }
-        
-        // Now do the removal and reshuffling
-        if let Some(index_to_remove) = target_index {
-            let last_index = self.automated_liquidity_index - 1;
+            // First pass: Collect all data and validate
+            let mut removal_data: Vec<(NonFungibleLocalId, NonFungibleGlobalId, LiquidityReceipt, Decimal, Decimal, usize)> = Vec::new();
+            let mut total_order_size = Decimal::ZERO;
             
-            if index_to_remove == last_index {
-                // Removing the last entry - simple case
-                self.automated_liquidity.remove(&index_to_remove);
-            } else {
-                // Not the last entry - need to move last to fill gap
-                // Remove the target entry
-                self.automated_liquidity.remove(&index_to_remove);
+            for local_id in liquidity_receipt_bucket.as_non_fungible().non_fungible_local_ids() {
+                let global_id = NonFungibleGlobalId::new(self.liquidity_receipt.address(), local_id.clone());
+                let kvs_data = self.liquidity_data.get(&global_id).unwrap();
+                assert!(kvs_data.xrd_liquidity_available > dec!(0), "No liquidity available to remove");
                 
-                if let Some(last_entry) = last_entry_data {
-                    // Remove from last position
-                    self.automated_liquidity.remove(&last_index);
-                    // Insert at the gap position
-                    self.automated_liquidity.insert(index_to_remove, last_entry);
+                let nft_data: LiquidityReceipt = self.liquidity_receipt.get_non_fungible_data(&local_id);
+                let order_size = kvs_data.xrd_liquidity_available;
+                let discount = nft_data.discount;
+                let index = (discount / dec!(0.00025)).checked_floor().unwrap().to_string().parse::<usize>().unwrap();
+                
+                removal_data.push((local_id.clone(), global_id, nft_data, order_size, discount, index));
+                total_order_size += order_size;
+            }
+
+            // Second pass: Update NFT data for auto_refill receipts
+            let mut automated_removals: Vec<NonFungibleGlobalId> = Vec::new();
+            for (local_id, global_id, nft_data, _, _, _) in &removal_data {
+                if nft_data.auto_refill {
+                    self.liquidity_receipt.update_non_fungible_data(local_id, "auto_refill", false);
+                    automated_removals.push(global_id.clone());
                 }
             }
-            
-            self.automated_liquidity_index -= 1;
-        }
-    }
 
-    // Fourth pass: Update liquidity index
-    for (_, _, _, order_size, _, index) in &removal_data {
-        self.liquidity_index[*index] -= *order_size;
-    }
-
-    // Fifth pass: Find all keys to remove from buy list
-    let mut keys_to_remove: Vec<u128> = Vec::new();
-    for (_, global_id, _, _, _, _) in &removal_data {
-        for (key, tree_global_id, _) in self.buy_list.range(0..u128::MAX) {
-            if tree_global_id == global_id.clone() {
-                keys_to_remove.push(key);
-                break;
+            // Third pass: Remove from automated liquidity tracking
+            for global_id_to_remove in automated_removals {
+                let mut target_index = None;
+                let mut last_entry_data = None;
+                
+                // Find the target and get last entry data if needed
+                for i in 1..self.automated_liquidity_index {
+                    if let Some(stored_global_id) = self.automated_liquidity.get(&i) {
+                        if *stored_global_id == global_id_to_remove {
+                            target_index = Some(i);
+                        }
+                        // Store the last entry data
+                        if i == self.automated_liquidity_index - 1 {
+                            last_entry_data = Some(stored_global_id.clone());
+                        }
+                    }
+                }
+                
+                // Now do the removal and reshuffling
+                if let Some(index_to_remove) = target_index {
+                    let last_index = self.automated_liquidity_index - 1;
+                    
+                    if index_to_remove == last_index {
+                        // Removing the last entry - simple case
+                        self.automated_liquidity.remove(&index_to_remove);
+                    } else {
+                        // Not the last entry - need to move last to fill gap
+                        // Remove the target entry
+                        self.automated_liquidity.remove(&index_to_remove);
+                        
+                        if let Some(last_entry) = last_entry_data {
+                            // Remove from last position
+                            self.automated_liquidity.remove(&last_index);
+                            // Insert at the gap position
+                            self.automated_liquidity.insert(index_to_remove, last_entry);
+                        }
+                    }
+                    
+                    self.automated_liquidity_index -= 1;
+                }
             }
+
+            // Fourth pass: Update liquidity index
+            for (_, _, _, order_size, _, index) in &removal_data {
+                self.liquidity_index[*index] -= *order_size;
+            }
+
+            // Fifth pass: Find all keys to remove from buy list
+            let mut keys_to_remove: Vec<u128> = Vec::new();
+            for (_, global_id, _, _, _, _) in &removal_data {
+                for (key, tree_global_id, _) in self.buy_list.range(0..u128::MAX) {
+                    if tree_global_id == global_id.clone() {
+                        keys_to_remove.push(key);
+                        break;
+                    }
+                }
+            }
+
+            // Remove from buy list
+            for key in keys_to_remove {
+                self.buy_list.remove(&key);
+            }
+
+            // Sixth pass: Update KVS data
+            for (_, global_id, _, _, _, _) in &removal_data {
+                let mut kvs_data = self.liquidity_data.get_mut(global_id).unwrap();
+                kvs_data.xrd_liquidity_available = dec!(0);
+            }
+
+            // Take XRD from vault
+            let xrd_bucket = self.xrd_liquidity.take(total_order_size);
+            self.total_xrd_locked -= total_order_size;
+
+            // Emit events
+            for (local_id, _, _, order_size, _, _) in removal_data {
+                Runtime::emit_event(LiquidityRemovedEvent {
+                    receipt_id: local_id,
+                    xrd_amount: order_size,
+                });
+            }
+
+            (xrd_bucket, liquidity_receipt_bucket)
         }
-    }
-
-    // Remove from buy list
-    for key in keys_to_remove {
-        self.buy_list.remove(&key);
-    }
-
-    // Sixth pass: Update KVS data
-    for (_, global_id, _, _, _, _) in &removal_data {
-        let mut kvs_data = self.liquidity_data.get_mut(global_id).unwrap();
-        kvs_data.xrd_liquidity_available = dec!(0);
-    }
-
-    // Take XRD from vault
-    let xrd_bucket = self.xrd_liquidity.take(total_order_size);
-    self.total_xrd_locked -= total_order_size;
-
-    // Emit events
-    for (local_id, _, _, order_size, _, _) in removal_data {
-        Runtime::emit_event(LiquidityRemovedEvent {
-            receipt_id: local_id,
-            xrd_amount: order_size,
-        });
-    }
-
-    (xrd_bucket, liquidity_receipt_bucket)
-}
 
         /// Processes LSU unstaking using on-ledger order matching.
         /// 
@@ -1066,13 +1106,12 @@ pub fn remove_liquidity(&mut self, liquidity_receipt_bucket: Bucket) -> (Bucket,
                 let index = (discount / dec!(0.00025)).checked_floor().unwrap().to_string().parse::<usize>().unwrap();
                 *index_updates.entry(index).or_insert(dec!(0)) += fill_amount;
 
-                // Queue fill operation
-                let order_fill_key = CombinedKey::new(local_id_u64, self.order_fill_counter as u32, 0).key;
+                // Create order fill key using new structure
+                let order_fill_key = OrderFillKey::new(local_id_u64, self.order_fill_counter as u32, 0);
                 self.order_fill_counter += 1;
                 
                 if auto_unstake {
                     unstake_operations.push((order_fill_key, lsu_taken));
-                    // We'll get the vault resource after unstaking
                 } else {
                     let resource = lsu_taken.resource_address();
                     vault_resources_needed.insert(resource);
@@ -1223,8 +1262,9 @@ pub fn remove_liquidity(&mut self, liquidity_receipt_bucket: Bucket) -> (Bucket,
                     _ => 0,
                 };
 
-                let start_key = CombinedKey::new(order_id_u64, 1, 0).key;
-                let end_key = CombinedKey::new(order_id_u64, u32::MAX, 0).key;
+                // Use OrderFillKey for searching
+                let start_key = OrderFillKey::new(order_id_u64, 1, 0);
+                let end_key = OrderFillKey::new(order_id_u64, u32::MAX, 0);
 
                 let mut fills_collected_for_this_order: u64 = 0;
                 let mut fills_to_remove = Vec::new();
@@ -1305,7 +1345,7 @@ pub fn remove_liquidity(&mut self, liquidity_receipt_bucket: Bucket) -> (Bucket,
 
             (bucket_vec, liquidity_receipt_bucket)
         }
-        
+                
         /// Collects accumulated platform fees.
         /// 
         /// This method allows the component owner to withdraw all platform fees that have been collected
@@ -1527,8 +1567,9 @@ pub fn remove_liquidity(&mut self, liquidity_receipt_bucket: Bucket) -> (Bucket,
                 _ => return (dec!(0), 0, dec!(0), dec!(0)),
             };
             
-            let start_key = CombinedKey::new(receipt_id_u64, 1, 0).key;
-            let end_key = CombinedKey::new(receipt_id_u64, u32::MAX, 0).key;
+            // Use OrderFillKey for searching
+            let start_key = OrderFillKey::new(receipt_id_u64, 1, 0);
+            let end_key = OrderFillKey::new(receipt_id_u64, u32::MAX, 0);
             
             let mut claimable_now = dec!(0);
             let mut total_stake_claim_value = dec!(0);
@@ -1662,6 +1703,14 @@ pub fn remove_liquidity(&mut self, liquidity_receipt_bucket: Bucket) -> (Bucket,
             }
             
             liquidity_ahead
+        }
+
+        // Helper function to convert NFT ID to u32
+        fn nft_id_to_u32(local_id: &NonFungibleLocalId) -> u32 {
+            match local_id {
+                NonFungibleLocalId::Integer(i) => i.value() as u32,  // Cast u64 to u32
+                _ => panic!("Invalid NFT ID type")
+            }
         }
 
 
