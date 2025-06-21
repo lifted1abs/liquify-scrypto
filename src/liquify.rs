@@ -122,11 +122,6 @@ struct RefillThresholdUpdatedEvent {
     refill_threshold: Decimal,
 }
 
-// #[derive(PartialEq, Eq, PartialOrd, Ord, Debug)]
-// pub struct CombinedKey {
-//     key: u128,
-// }
-
 pub struct BuyListKey;
 
 impl BuyListKey {
