@@ -169,7 +169,7 @@ impl TestEnvironment {
                 lookup.bucket("xrd"),
                 dec!("0.0010"),
                 true,       // auto_unstake
-                true,      // auto_refill
+                true,       // auto_refill
                 dec!("10000"),  // refill_threshold
             )})
             .call_method(
@@ -193,7 +193,7 @@ impl TestEnvironment {
                 lookup.bucket("xrd"),
                 dec!("0.010"),
                 true,       // auto_unstake
-                true,      // auto_refill
+                true,       // auto_refill
                 dec!("10000"),  // refill_threshold
             )})
             .call_method(
@@ -217,7 +217,7 @@ impl TestEnvironment {
                 lookup.bucket("xrd"),
                 dec!("0.050"),
                 true,       // auto_unstake
-                true,      // auto_refill
+                true,       // auto_refill
                 dec!("10000"),  // refill_threshold
             )})
             .call_method(

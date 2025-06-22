@@ -193,7 +193,6 @@ fn instantiate_test() {
     TestEnvironment::instantiate_test();
 }
 
-
 #[test]
 fn test_off_ledger_fills() {
     let mut ledger = TestEnvironment::instantiate_test();

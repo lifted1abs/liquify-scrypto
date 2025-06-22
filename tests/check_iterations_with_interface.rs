@@ -19,6 +19,7 @@ pub struct TestEnvironment {
     pub liquify_component: ComponentAddress,
     pub liquify_interface_component: ComponentAddress,
     pub owner_badge: ResourceAddress,
+    pub interface_owner_badge: ResourceAddress,
     pub liquidity_receipt: ResourceAddress,
     pub lsu_resource_address: ResourceAddress,
 }
@@ -73,6 +74,7 @@ impl TestEnvironment {
         println!("{:?}\n", receipt);
 
         let interface_component = receipt.expect_commit(true).new_component_addresses()[0];
+        let interface_owner_badge = receipt.expect_commit(true).new_resource_addresses()[0];
 
         // *********** Instantiate Liquify component ***********
         let manifest = ManifestBuilder::new()
@@ -99,9 +101,14 @@ impl TestEnvironment {
         let owner_badge = receipt.expect_commit(true).new_resource_addresses()[0];
         let liquidity_receipt = receipt.expect_commit(true).new_resource_addresses()[1];
 
-        // *********** Set interface target ***********
+        // *********** Set interface target WITH OWNER BADGE ***********
         let manifest = ManifestBuilder::new()
             .lock_fee_from_faucet()
+            .create_proof_from_account_of_amount(
+                admin_account_address, 
+                interface_owner_badge,
+                1,
+            )
             .call_method(
                 interface_component, 
                 "set_interface_target", 
@@ -276,6 +283,7 @@ impl TestEnvironment {
             liquify_component,
             liquify_interface_component: interface_component,
             owner_badge,
+            interface_owner_badge,
             liquidity_receipt,
             lsu_resource_address,
         }
