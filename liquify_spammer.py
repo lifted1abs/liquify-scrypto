@@ -19,6 +19,34 @@ CREDS_FILENAME = "creds.json"
 NETWORK = "stokenet"
 NETWORK_NUMBER = 2 # Mainnet = 1, Stokenet = 2
 
+# Validator/LSU pairs for diversified testing
+VALIDATOR_LSU_PAIRS = [
+    {
+        "validator": "validator_tdx_2_1sdlkptcwjpajqawnuya8r2mgl3eqt89hw27ww6du8kxmx3thmyu8l4",
+        "lsu": "resource_tdx_2_1t5hpjckz9tm63gqvxsl60ejhzvnlguly77tltvywnj06s2x9wjdxjn"
+    },
+    {
+        "validator": "validator_tdx_2_1sdtnujyn3720ymg8lakydkvc5tw4q3zecdj95akdwt9de362mvtd94",
+        "lsu": "resource_tdx_2_1t45l9ku3r5mwxazht2qutmhhk3660hqqvxkkyl8rxs20n9k2zv0w7t"
+    },
+    {
+        "validator": "validator_tdx_2_1svr6rmtd9ts5zx8d3euwmmp6mmjdtcj2q7zlmd8xjrn4qx7q5snkas",
+        "lsu": "resource_tdx_2_1t48zl3qmcv3pf24r0765q4zc6rrk83cfjv6wza2xksej80pcfd7p5g"
+    },
+    {
+        "validator": "validator_tdx_2_1sdvlm4e2x0mjr7mxkpfejz8m0tfwk0j937lxsw74t9lw3evhj5tlwk",
+        "lsu": "resource_tdx_2_1tkpwejwr35gg3xqc0advlv3c8nvs003nn0y80yw2757y5pcnf40qap"
+    },
+    {
+        "validator": "validator_tdx_2_1svwenmn2mkwf9vu5kegs9seql5j535rc3ddjcvg9v3j4d7lvnya70k",
+        "lsu": "resource_tdx_2_1thjlp88pc28eyfg3f2alq8zkggnr273j0saye4nj70vfnga6ldy7ru"
+    },
+    {
+        "validator": "validator_tdx_2_1sv5y2aedgkh5xrhge575e36pdmgrx0qwtg0xvldmmdy0je3rkhkhu2",
+        "lsu": "resource_tdx_2_1t5wwm4n6etcd6pxxfgnr5d0v9vd06qkruu74vx4tneu2jp7k27v3fm"
+    }
+]
+
 class SpammerInfo:
     def __init__(
             self,
@@ -462,6 +490,11 @@ async def build_unstake_manifest(spammer_info: SpammerInfo, amount):
     # Hardcode max_iterations to 26
     max_iterations = 26
     
+    # Randomly select a validator/LSU pair
+    selected_pair = random.choice(VALIDATOR_LSU_PAIRS)
+    validator = selected_pair["validator"]
+    lsu = selected_pair["lsu"]
+    
     manifest_string: str = f"""
     CALL_METHOD
         Address("component_tdx_2_1cptxxxxxxxxxfaucetxxxxxxxxx000527798379xxxxxxxxxyulkzl")
@@ -479,12 +512,12 @@ async def build_unstake_manifest(spammer_info: SpammerInfo, amount):
         Bucket("xrd_bucket")
     ;
     CALL_METHOD
-        Address("validator_tdx_2_1sdlkptcwjpajqawnuya8r2mgl3eqt89hw27ww6du8kxmx3thmyu8l4")
+        Address("{validator}")
         "stake"
         Bucket("xrd_bucket")
     ;
     TAKE_ALL_FROM_WORKTOP
-        Address("resource_tdx_2_1t5hpjckz9tm63gqvxsl60ejhzvnlguly77tltvywnj06s2x9wjdxjn")
+        Address("{lsu}")
         Bucket("lsu_bucket")
     ;
     CALL_METHOD
