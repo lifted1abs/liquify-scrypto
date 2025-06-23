@@ -156,7 +156,7 @@ mod interface_module {
         pub fn cycle_liquidity(&mut self, receipt_ids: Vec<NonFungibleLocalId>, max_fills_to_process: u64) -> Bucket {
             let liquify_component: Global<Liquify> = self.active_liquify_component.unwrap().into();
             
-            liquify_component.cycle_liquidity(receipt_ids, max_fills_to_process).into()
+            liquify_component.cycle_liquidity(receipt_ids).into()
         }
 
         pub fn get_claimable_xrd(&self, receipt_id: NonFungibleLocalId) -> (Decimal, u64, Decimal, Decimal) {
