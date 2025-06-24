@@ -176,11 +176,15 @@ async def main():
             print("Exiting now.")
             exit()  
 
-    # Spam unstakes
+# Spam unstakes
     if choice == 3:
-        amount_spammed = int(input("\nAmount spammed already: "))
+        # Get total amount to unstake (new feature)
+        total_to_unstake = int(input("\nHow much XRD worth of LSUs to unstake in total? "))
         
-        # New submenu for amount type
+        # Ask if they've already started
+        amount_already_done = int(input("\nAmount already unstaked (0 if starting fresh): "))
+        
+        # Amount type submenu (keeping the same as original)
         amount_type = int(input("\nChoose amount type:\n1) Random amounts (default: 100k-500k)\n2) Custom random range\n3) Set amount\n"))
         
         if amount_type == 2:
@@ -188,7 +192,6 @@ async def main():
             min_amount = int(input("\nEnter minimum amount (XRD): "))
             max_amount = int(input("Enter maximum amount (XRD): "))
             print(f"Will use random amounts between {min_amount:,} and {max_amount:,} XRD")
-            # We'll need to pass these to the function
             set_amount = None
             custom_range = (min_amount, max_amount)
         elif amount_type == 3:
@@ -203,16 +206,15 @@ async def main():
             print("Will use random amounts between 100,000 and 500,000 XRD worth of LSUs")
         
         start_spamming_question = input("\n!! Double-check your input !!\n\nStart spamming unstakes? y/n: ")
-    
+
         if (start_spamming_question.lower() == "y"):
             if custom_range:
-                await start_spamming_unstakes(spammer_info, amount_spammed, set_amount, custom_range)
+                await start_spamming_unstakes(spammer_info, amount_already_done, total_to_unstake, set_amount, custom_range)
             else:
-                await start_spamming_unstakes(spammer_info, amount_spammed, set_amount)
+                await start_spamming_unstakes(spammer_info, amount_already_done, total_to_unstake, set_amount)
         else:
             print("Exiting now.")
-            exit()     
-
+            exit()
 #
 # Get funds from the faucet (10k at a time)
 #
@@ -367,21 +369,34 @@ async def start_spamming_liquidity(spammer_info: SpammerInfo, total_to_spam: int
 #
 # Spam the Liquify component with ~105M XRD in unstakes
 #
-async def start_spamming_unstakes(spammer_info: SpammerInfo, amount_spammed = 0, set_amount = None, custom_range = None) -> None:
+async def start_spamming_unstakes(spammer_info: SpammerInfo, amount_spammed = 0, total_to_unstake = 105_000_000, set_amount = None, custom_range = None) -> None:
     spammer_info.current_epoch = await get_current_epoch(spammer_info)
 
-    print(f"Start spamming assuming {amount_spammed} XRD already unstaked...")
+    print(f"Start spamming assuming {amount_spammed:,} XRD already unstaked...")
+    print(f"Target total: {total_to_unstake:,} XRD worth of LSUs")
 
-    while amount_spammed < 105_000_000:
-        # Build manifest
+    while amount_spammed < total_to_unstake:
+        # Calculate amount for this transaction
+        remaining = total_to_unstake - amount_spammed
+        
         # Use set_amount if provided, otherwise generate random amount
         if set_amount is not None:
-            amount = set_amount
+            amount = min(set_amount, remaining)  # Don't exceed remaining
         elif custom_range is not None:
-            amount = random.randrange(custom_range[0], custom_range[1])
+            max_for_range = min(custom_range[1], remaining)
+            if max_for_range < custom_range[0]:
+                amount = remaining  # Use whatever's left
+            else:
+                amount = random.randrange(custom_range[0], max_for_range + 1)
         else:
-            amount = random.randrange(100_000, 500_000) # Default: 100k - 500k
+            # Default: 100k - 500k
+            max_default = min(500_000, remaining)
+            if max_default < 100_000:
+                amount = remaining
+            else:
+                amount = random.randrange(100_000, max_default + 1)
 
+        # Build manifest (same as original)
         manifest = await build_unstake_manifest(
             spammer_info,
             amount
@@ -403,12 +418,12 @@ async def start_spamming_unstakes(spammer_info: SpammerInfo, amount_spammed = 0,
 
         # Increment the total amount spammed so we eventually reach our stop
         amount_spammed += amount
-        print(f"Total amount unstaked: {amount_spammed} XRD worth of LSUs.")
+        print(f"Total amount unstaked: {amount_spammed:,} / {total_to_unstake:,} XRD worth of LSUs.")
 
         await asyncio.sleep(0.5)
 
     print(f"Done spamming")
-    exit()    
+    exit()  
 
 #
 # Returns the current epoch

@@ -1,9 +1,5 @@
-// src/liquify.rs
-
 use scrypto::prelude::*;
 use scrypto_avltree::AvlTree;
-
-
 
 #[derive(ScryptoSbor, NonFungibleData, Debug)]
 pub struct UnstakeData {
@@ -38,7 +34,6 @@ pub struct AutomationReadyReceipt {
     pub refill_threshold: Decimal,
 }
 
-// NFT - Data that doesn't change during fills
 #[derive(NonFungibleData, ScryptoSbor, PartialEq, Debug, Clone)]
 pub struct LiquidityReceipt {
     key_image_url: Url,
@@ -50,7 +45,6 @@ pub struct LiquidityReceipt {
     refill_threshold: Decimal,
 }
 
-// KVS - Data that updates during fills
 #[derive(ScryptoSbor, PartialEq, Debug, Clone)]
 pub struct LiquidityData {
     pub xrd_liquidity_filled: Decimal,
@@ -207,6 +201,7 @@ mod liquify_module {
             set_receipt_image_url => restrict_to: [owner];
             set_minimum_refill_threshold => restrict_to: [owner];
             set_max_fills_per_cycle => restrict_to: [owner];
+            set_unstake_value_range => restrict_to: [owner];
             collect_platform_fees => restrict_to: [owner];
         }
     }
@@ -231,6 +226,8 @@ mod liquify_module {
         fee_vault: Vault,
         minimum_liquidity: Decimal,
         minimum_refill_threshold: Decimal,
+        minimum_unstake_value: Decimal,
+        maximum_unstake_value: Decimal,
         receipt_image_url: Url,
         automation_fee: Decimal,
         automated_liquidity: KeyValueStore<u64, NonFungibleGlobalId>,
@@ -328,11 +325,13 @@ mod liquify_module {
                 fee_vault: Vault::new(XRD),
                 minimum_liquidity: dec!(10000),
                 minimum_refill_threshold: dec!(10000),
+                minimum_unstake_value: dec!(1000),
+                maximum_unstake_value: dec!(10000000),
                 receipt_image_url: Url::of("https://bafybeib7cokm27lwwkunaibn7hczijn3ztkypbzttmt7hymaov44s5e5sm.ipfs.w3s.link/liquify2.png"),
                 automation_fee: dec!(5),
                 automated_liquidity: KeyValueStore::new_with_registered_type(),
                 automated_liquidity_index: 1,
-                max_fills_per_cycle: 30,
+                max_fills_per_cycle: 50,
             }
             .instantiate()
             .prepare_to_globalize(
@@ -375,6 +374,7 @@ mod liquify_module {
                     get_raw_buy_list_range => Free, updatable;
                     get_active_liquidity_positions => Free, updatable;
                     set_minimum_refill_threshold => Free, updatable;
+                    set_unstake_value_range => Free, updatable;
                     get_automation_ready_receipts => Free, updatable;
                     get_receipt_detail => Free, updatable;
 
@@ -853,8 +853,7 @@ mod liquify_module {
             total_automation_fees
         }
 
-        pub fn calculate_claimable_xrd_and_ordered_list(&self, receipt_id: NonFungibleLocalId) 
-            -> (Decimal, u64, Vec<u128>) {
+        pub fn calculate_claimable_xrd_and_ordered_list(&self, receipt_id: NonFungibleLocalId) -> (Decimal, u64, Vec<u128>) {
             // Returns: (total_claimable_now, total_fills, vec_of_avl_keys_ordered_by_amount_desc)
             
             let receipt_id_u64 = match receipt_id {
@@ -1086,6 +1085,7 @@ mod liquify_module {
         }
 
         fn process_unstake(&mut self, mut lsu_bucket: FungibleBucket, order_keys: Vec<u128>) -> (Bucket, FungibleBucket) {
+            
             let mut xrd_bucket: Bucket = Bucket::new(XRD);
             let mut validator = self.get_validator_from_lsu(lsu_bucket.resource_address());
             
@@ -1486,9 +1486,12 @@ mod liquify_module {
         }
 
         pub fn set_max_fills_per_cycle(&mut self, max_fills: u64) {
-            assert!(max_fills > 0, "Max fills per cycle must be greater than 0");
-            assert!(max_fills <= 50, "Max fills per cycle cannot exceed 50"); // Safety cap
             self.max_fills_per_cycle = max_fills;
+        }
+
+        pub fn set_unstake_value_range(&mut self, min: Decimal, max: Decimal) {
+            self.minimum_unstake_value = min;
+            self.maximum_unstake_value = max;
         }
 
         /// Sets the receipt NFT image URL.
