@@ -131,11 +131,9 @@ impl BuyListKey {
 pub struct OrderFillKey;
 
 impl OrderFillKey {
-    pub fn new(receipt_id: u64, fill_number: u32, reserved: u32) -> u128 {
-        // Pack: receipt_id (64 bits) | fill_number (32 bits) | reserved (32 bits) = 128 bits
-        ((receipt_id as u128) << 64) | 
-        ((fill_number as u128) << 32) |
-        (reserved as u128)
+    pub fn new(receipt_id: u64, fill_number: u64) -> u128 {
+        // Pack: receipt_id (64 bits) | fill_number (64 bits) = 128 bits
+        ((receipt_id as u128) << 64) | (fill_number as u128)
     }
 }
 
@@ -861,8 +859,8 @@ mod liquify_module {
                 _ => return (dec!(0), 0, vec![]),
             };
             
-            let start_key = OrderFillKey::new(receipt_id_u64, 1, 0);
-            let end_key = OrderFillKey::new(receipt_id_u64, u32::MAX, 0);
+            let start_key = OrderFillKey::new(receipt_id_u64, 1);
+            let end_key = OrderFillKey::new(receipt_id_u64, u64::MAX);
             
             let current_epoch = Runtime::current_epoch().number() as u64;
             let mut claimable_fills: Vec<(u128, Decimal)> = Vec::new();
@@ -1162,7 +1160,7 @@ mod liquify_module {
                 *index_updates.entry(index).or_insert(dec!(0)) += fill_amount;
 
                 // Create order fill key using new structure
-                let order_fill_key = OrderFillKey::new(local_id_u64, self.order_fill_counter as u32, 0);
+                let order_fill_key = OrderFillKey::new(local_id_u64, self.order_fill_counter);
                 self.order_fill_counter += 1;
                 
                 if auto_unstake {
