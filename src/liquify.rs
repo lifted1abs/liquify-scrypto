@@ -130,21 +130,8 @@ impl BuyListKey {
         (receipt_id as u128)                        // Bottom 32 bits
     }
     
-    // Helper methods to extract components
-    pub fn extract_discount(key: u128) -> u16 {
-        (key >> 112) as u16
-    }
-    
     pub fn extract_auto_unstake(key: u128) -> bool {
         ((key >> 96) & 0xFFFF) == 1
-    }
-    
-    pub fn extract_position(key: u128) -> u64 {
-        ((key >> 32) & 0xFFFFFFFFFFFFFFFF) as u64
-    }
-    
-    pub fn extract_receipt_id(key: u128) -> u32 {
-        (key & 0xFFFFFFFF) as u32
     }
 }
 
@@ -351,7 +338,7 @@ mod liquify_module {
                 automated_liquidity: KeyValueStore::new_with_registered_type(),
                 automated_liquidity_index: 1,
                 max_fills_per_cycle: 50,
-                small_order_threshold: dec!(1000), 
+                small_order_threshold: dec!(100), 
             }
             .instantiate()
             .prepare_to_globalize(
