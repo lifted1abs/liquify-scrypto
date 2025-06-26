@@ -120,11 +120,31 @@ struct RefillThresholdUpdatedEvent {
 pub struct BuyListKey;
 
 impl BuyListKey {
-    pub fn new(discount_basis_points: u32, position: u64, receipt_id: u32) -> u128 {
-        // Pack: discount (32 bits) | position (64 bits) | receipt_id (32 bits) = 128 bits
-        ((discount_basis_points as u128) << 96) | 
-        ((position as u128) << 32) | 
-        (receipt_id as u128)
+    pub fn new(discount_basis_points: u16, auto_unstake: bool, position: u64, receipt_id: u32) -> u128 {
+        // Pack: discount (16 bits) | auto_unstake (16 bits) | position (64 bits) | receipt_id (32 bits) = 128 bits
+        let auto_unstake_flag = if auto_unstake { 1u16 } else { 0u16 };
+        
+        ((discount_basis_points as u128) << 112) |  // Top 16 bits
+        ((auto_unstake_flag as u128) << 96) |       // Next 16 bits  
+        ((position as u128) << 32) |                // Next 64 bits
+        (receipt_id as u128)                        // Bottom 32 bits
+    }
+    
+    // Helper methods to extract components
+    pub fn extract_discount(key: u128) -> u16 {
+        (key >> 112) as u16
+    }
+    
+    pub fn extract_auto_unstake(key: u128) -> bool {
+        ((key >> 96) & 0xFFFF) == 1
+    }
+    
+    pub fn extract_position(key: u128) -> u64 {
+        ((key >> 32) & 0xFFFFFFFFFFFFFFFF) as u64
+    }
+    
+    pub fn extract_receipt_id(key: u128) -> u32 {
+        (key & 0xFFFFFFFF) as u32
     }
 }
 
@@ -231,6 +251,7 @@ mod liquify_module {
         automated_liquidity: KeyValueStore<u64, NonFungibleGlobalId>,
         automated_liquidity_index: u64,
         max_fills_per_cycle: u64,
+        small_order_threshold: Decimal,
     }
 
     impl Liquify {
@@ -317,7 +338,7 @@ mod liquify_module {
                 discounts,
                 total_xrd_volume: Decimal::ZERO,
                 total_xrd_locked: Decimal::ZERO,
-                component_status: false,  // CHANGED: Start in disabled state
+                component_status: false, 
                 order_fill_counter: 1,
                 platform_fee: dec!(0.00),
                 fee_vault: Vault::new(XRD),
@@ -330,6 +351,7 @@ mod liquify_module {
                 automated_liquidity: KeyValueStore::new_with_registered_type(),
                 automated_liquidity_index: 1,
                 max_fills_per_cycle: 50,
+                small_order_threshold: dec!(1000), 
             }
             .instantiate()
             .prepare_to_globalize(
@@ -416,18 +438,18 @@ mod liquify_module {
             }
 
             // Convert discount to basis points for the key
-            let discount_basis_points = match (discount * dec!(10000)).checked_floor() {
-                Some(val) => match val.to_string().parse::<u32>() {
-                    Ok(points) => points,
+            let discount_basis_points: u16 = match (discount * dec!(10000)).checked_floor() {
+                Some(val) => match val.to_string().parse::<u16>() {
+                    Ok(points) => points,  // Convert to u16
                     Err(_) => panic!("Failed to parse discount basis points")
                 },
                 None => panic!("Failed to convert discount to basis points")
             };
-            
-            // Create buy list key with new structure - using position counter, not epoch!
-            let receipt_id_u32 = self.liquidity_receipt_counter as u32;  // Cast to u32
-            let buy_list_key = BuyListKey::new(discount_basis_points, self.avl_position_counter, receipt_id_u32);
-            self.avl_position_counter += 1;  // Increment position counter
+
+            // Create buy list key with new structure - now includes auto_unstake
+            let receipt_id_u32 = self.liquidity_receipt_counter as u32;
+            let buy_list_key = BuyListKey::new(discount_basis_points, auto_unstake, self.avl_position_counter, receipt_id_u32);
+            self.avl_position_counter += 1;
             
             let id = NonFungibleLocalId::Integer(IntegerNonFungibleLocalId::new(self.liquidity_receipt_counter));
 
@@ -523,12 +545,12 @@ mod liquify_module {
             // Get discount for the key
             let discount_basis_points = match (nft_data.discount * dec!(10000)).checked_floor() {
                 Some(val) => match val.to_string().parse::<u32>() {
-                    Ok(points) => points,
+                    Ok(points) => points as u16,  // Convert to u16
                     Err(_) => panic!("Failed to parse discount basis points")
                 },
                 None => panic!("Failed to convert discount to basis points")
             };
-            
+
             // Find and remove from old position
             let mut key_to_remove = None;
             self.buy_list.range_mut(0..u128::MAX).for_each(|(key, tree_global_id, _)| {
@@ -538,24 +560,24 @@ mod liquify_module {
                 }
                 scrypto_avltree::IterMutControl::Continue
             });
-            
+
             if let Some(key) = key_to_remove {
                 self.buy_list.remove(&key);
             }
-            
+
             // Update KVS data
             kvs_data.xrd_liquidity_available += additional_xrd_amount;
             let current_epoch = Runtime::current_epoch().number() as u32;
             kvs_data.last_added_epoch = current_epoch;
-            
+
             // Create new key with updated position counter
             let receipt_id_u32 = match local_id.clone() {
                 NonFungibleLocalId::Integer(i) => i.value() as u32,
                 _ => panic!("Invalid NFT ID type")
             };
-            let new_buy_list_key = BuyListKey::new(discount_basis_points, self.avl_position_counter, receipt_id_u32);
+            let new_buy_list_key = BuyListKey::new(discount_basis_points, nft_data.auto_unstake, self.avl_position_counter, receipt_id_u32);
             self.avl_position_counter += 1;
-            
+
             // Reinsert at new position
             self.buy_list.insert(new_buy_list_key, global_id.clone());
             
@@ -750,14 +772,20 @@ mod liquify_module {
                     match fill {
                         UnstakeNFTOrLSU::UnstakeNFT(unstake_nft_data) => {
                             let local_id: NonFungibleLocalId = unstake_nft_data.id.clone();
+                            let nft_resource_address = unstake_nft_data.resource_address;
                             
                             // Get the unstake NFT from vault
-                            let unstake_nft_vault = self.component_vaults.get(&unstake_nft_data.resource_address).unwrap();
+                            let unstake_nft_vault = self.component_vaults.get_mut(&nft_resource_address).unwrap();
                             let unstake_nft = unstake_nft_vault.as_non_fungible().take_non_fungible(&local_id);
                             
-                            // Get validator address from the resource address mapping
-                            let validator_address = self.get_validator_from_unstake_nft(&unstake_nft_data.resource_address);
+                            // Get validator address - avoid borrowing self immutably while mutably borrowed
+                            let metadata: GlobalAddress = ResourceManager::from(nft_resource_address)
+                                .get_metadata("validator")
+                                .unwrap()
+                                .unwrap_or_else(|| Runtime::panic(String::from("Not an unstake NFT!")));
+                            let validator_address = ComponentAddress::try_from(metadata).unwrap();
                             let mut validator: Global<Validator> = Global::from(validator_address);
+                            
                             let claimed_xrd = validator.claim_xrd(unstake_nft);
                             
                             total_xrd.put(claimed_xrd);
@@ -812,7 +840,7 @@ mod liquify_module {
                 // Create new key with new position
                 let discount_basis_points = match (nft_data.discount * dec!(10000)).checked_floor() {
                     Some(val) => match val.to_string().parse::<u32>() {
-                        Ok(points) => points,
+                        Ok(points) => points as u16,
                         Err(_) => panic!("Failed to parse discount basis points")
                     },
                     None => panic!("Failed to convert discount to basis points")
@@ -823,7 +851,7 @@ mod liquify_module {
                     _ => panic!("Invalid NFT ID type")
                 };
                 
-                let new_buy_list_key = BuyListKey::new(discount_basis_points, self.avl_position_counter, receipt_id_u32);
+                let new_buy_list_key = BuyListKey::new(discount_basis_points, nft_data.auto_unstake, self.avl_position_counter, receipt_id_u32);
                 self.avl_position_counter += 1;
                 
                 // Reinsert at new position
@@ -1091,8 +1119,11 @@ mod liquify_module {
             let lsu_resource = lsu_bucket.resource_address();
             let initial_lsu_amount = lsu_bucket.amount();
             
-            // Pre-calculate redemption rate
+            // Pre-calculate redemption rate and check if this is a small order
             let redemption_rate = validator.get_redemption_value(dec!(1));
+            let total_lsu_value = lsu_bucket.amount() * redemption_rate;
+            let require_auto_unstake_only = total_lsu_value < self.small_order_threshold;
+            
             let mut remaining_lsus = lsu_bucket.amount();
             let mut remaining_value = remaining_lsus * redemption_rate;
 
@@ -1110,6 +1141,14 @@ mod liquify_module {
                 let global_id_option = self.buy_list.get(&key);
                 if global_id_option.is_none() {
                     continue;
+                }
+                
+                // ENFORCEMENT: Check auto_unstake requirement for small orders
+                if require_auto_unstake_only {
+                    let has_auto_unstake = BuyListKey::extract_auto_unstake(key);
+                    if !has_auto_unstake {
+                        continue; // Skip this order - doesn't meet auto_unstake requirement
+                    }
                 }
                 
                 let global_id = global_id_option.unwrap().clone();
@@ -1316,8 +1355,8 @@ mod liquify_module {
                 };
 
                 // Use OrderFillKey for searching
-                let start_key = OrderFillKey::new(order_id_u64, 1, 0);
-                let end_key = OrderFillKey::new(order_id_u64, u32::MAX, 0);
+                let start_key = OrderFillKey::new(order_id_u64, 1);
+                let end_key = OrderFillKey::new(order_id_u64, u64::MAX);
 
                 let mut fills_collected_for_this_order: u64 = 0;
                 let mut fills_to_remove = Vec::new();
@@ -1630,8 +1669,8 @@ mod liquify_module {
             };
             
             // Use OrderFillKey for searching
-            let start_key = OrderFillKey::new(receipt_id_u64, 1, 0);
-            let end_key = OrderFillKey::new(receipt_id_u64, u32::MAX, 0);
+            let start_key = OrderFillKey::new(receipt_id_u64, 1);
+            let end_key = OrderFillKey::new(receipt_id_u64, u64::MAX);
             
             let mut claimable_now = dec!(0);
             let mut total_stake_claim_value = dec!(0);
