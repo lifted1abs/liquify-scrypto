@@ -230,9 +230,9 @@ fn test_add_liquidity_scaling() {
             .call_method_with_name_lookup(liquify_component, "add_liquidity", |lookup| {(
                 lookup.bucket("xrd"),
                 discount,
-                false,
-                false,
-                dec!("0"),
+                false,          // auto_unstake
+                false,          // auto_refill
+                dec!("0"),      // refill_threshold
             )})
             .call_method(
                 user_account4,
@@ -263,10 +263,10 @@ fn test_add_liquidity_scaling() {
         .take_all_from_worktop(XRD, "xrd")
         .call_method_with_name_lookup(liquify_component, "add_liquidity", |lookup| {(
             lookup.bucket("xrd"),
-            dec!("0.01"),    // 1% discount
-            false,
-            false,
-            dec!("0"),
+            dec!("0.01"),       // 1% discount
+            false,              // auto_unstake
+            false,              // auto_refill
+            dec!("0"),          // refill_threshold
         )})
         .call_method(
             user_account1,
@@ -320,9 +320,9 @@ fn test_unstake_scaling() {
             .call_method_with_name_lookup(liquify_component, "add_liquidity", |lookup| {(
                 lookup.bucket("xrd"),
                 discount,
-                false,
-                false,
-                dec!("0"),
+                false,          // auto_unstake
+                false,          // auto_refill
+                dec!("0"),      // refill_threshold
             )})
             .call_method(
                 user_account4,

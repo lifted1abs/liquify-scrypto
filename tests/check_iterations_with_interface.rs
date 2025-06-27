@@ -384,8 +384,8 @@ fn test_interface_iterations() {
         
         // Show approximate positions filled
         if lsu_spent > dec!(0) {
-            let approx_positions = lsu_spent / dec!(10);
-            println!("\nApproximate positions filled: {} (assuming 10 XRD positions)", approx_positions);
+            let approx_positions = lsu_spent / dec!(1);  // Changed from 10 to 1 since positions are 1 XRD each
+            println!("\nApproximate positions filled: {} (assuming 1 XRD positions)", approx_positions);
         }
         
         assert!(xrd_received > dec!(0), "Should have received XRD from unstaking");

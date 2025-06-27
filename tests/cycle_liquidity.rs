@@ -275,7 +275,6 @@ fn test_cycle_liquidity_full_flow() {
             "cycle_liquidity",
             manifest_args!(
                 vec![receipt_id.clone()],
-                10u64
             ),
         )
         .call_method(
@@ -340,7 +339,6 @@ fn test_cycle_liquidity_full_flow() {
             "cycle_liquidity",
             manifest_args!(
                 vec![receipt_id],
-                10u64
             ),
         )
         .call_method(

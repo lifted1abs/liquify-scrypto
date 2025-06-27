@@ -240,9 +240,8 @@ fn test_off_ledger_fills() {
     println!("Will test unstaking with {} keys", NUM_KEYS_TO_TEST);
     println!("======================\n");
 
-    // Get epoch BEFORE creating positions
-    let creation_epoch = ledger.ledger.get_current_epoch().number() as u32;
-    println!("Creating positions in epoch: {}", creation_epoch);
+    // Track the starting position counter
+    let mut position_counter = 1u64;
 
     // Create liquidity positions
     for i in 0..NUM_LIQUIDITY_POSITIONS {
@@ -269,21 +268,32 @@ fn test_off_ledger_fills() {
             ledger.user_account4.clone(),
         );
         receipt.expect_commit_success();
+        position_counter += 1;
     }
 
     println!("✓ Successfully created {} liquidity positions", NUM_LIQUIDITY_POSITIONS);
 
-    // Generate keys using the CREATION epoch
-    let discount_u64 = 10u64; // 0.0010 * 10000
+    // Generate keys using the NEW BuyListKey structure
+    let discount_basis_points = 10u16; // 0.0010 * 10000
+    let auto_unstake_flag = true;
     let mut off_ledger_order_vec: Vec<u128> = Vec::new();
     
-    for liquidity_id in 1..=NUM_KEYS_TO_TEST {
-        let key = ((discount_u64 as u128) << 96) | ((creation_epoch as u128) << 64) | (liquidity_id as u128);
+    // Keys should start from position 1 through NUM_KEYS_TO_TEST
+    for i in 0..NUM_KEYS_TO_TEST {
+        let position = 1 + i as u64;  // Positions 1 through NUM_KEYS_TO_TEST
+        let receipt_id = 1 + i as u32; // Receipt IDs 1 through NUM_KEYS_TO_TEST
+        
+        // Use the BuyListKey::new method structure
+        let key = ((discount_basis_points as u128) << 112) |  // Top 16 bits
+                  ((1u128) << 96) |                           // auto_unstake flag (1 for true)
+                  ((position as u128) << 32) |                // Position
+                  (receipt_id as u128);                       // Receipt ID
+        
         off_ledger_order_vec.push(key);
     }
 
     println!("\n=== KEY GENERATION ===");
-    println!("Generated {} keys for epoch {}", off_ledger_order_vec.len(), creation_epoch);
+    println!("Generated {} keys with new structure", off_ledger_order_vec.len());
 
     // Test unstaking
     let initial_xrd_balance = ledger.ledger.get_component_balance(user_account1, XRD);
