@@ -1062,12 +1062,23 @@ mod liquify_module {
         pub fn liquify_unstake(&mut self, lsu_bucket: FungibleBucket, max_iterations: u8) -> (Bucket, FungibleBucket) {
             assert!(self.validate_lsu(lsu_bucket.resource_address()), "Bucket must contain a native Radix Validator LSU");
 
+            // Pre-calculate if this is a small order
+            let validator = self.get_validator_from_lsu(lsu_bucket.resource_address());
+            let redemption_rate = validator.get_redemption_value(dec!(1));
+            let total_lsu_value = lsu_bucket.amount() * redemption_rate;
+            let is_small_order = total_lsu_value < self.small_order_threshold;
+
             let mut order_keys = Vec::new();
             let mut iter_count = 0;
             
             self.buy_list.range_mut(0..u128::MAX).for_each(|(avl_key, _global_id, _)| {
                 if iter_count >= max_iterations as usize {
                     return scrypto_avltree::IterMutControl::Break;
+                }
+                
+                // For small orders, only include keys with auto_unstake=true
+                if is_small_order && !BuyListKey::extract_auto_unstake(*avl_key) {
+                    return scrypto_avltree::IterMutControl::Continue;
                 }
                 
                 order_keys.push(*avl_key);
@@ -1096,7 +1107,23 @@ mod liquify_module {
         ///   - `FungibleBucket`: Any remaining LSUs that couldn't be matched
         pub fn liquify_unstake_off_ledger(&mut self, lsu_bucket: FungibleBucket, order_keys: Vec<u128>) -> (Bucket, FungibleBucket) {
             assert!(self.validate_lsu(lsu_bucket.resource_address()), "Bucket must contain a native Radix Validator LSU");
-            self.process_unstake(lsu_bucket, order_keys)
+            
+            // Pre-calculate if this is a small order
+            let validator = self.get_validator_from_lsu(lsu_bucket.resource_address());
+            let redemption_rate = validator.get_redemption_value(dec!(1));
+            let total_lsu_value = lsu_bucket.amount() * redemption_rate;
+            let is_small_order = total_lsu_value < self.small_order_threshold;
+            
+            // Filter order keys if it's a small order
+            let filtered_keys = if is_small_order {
+                order_keys.into_iter()
+                    .filter(|key| BuyListKey::extract_auto_unstake(*key))
+                    .collect()
+            } else {
+                order_keys
+            };
+            
+            self.process_unstake(lsu_bucket, filtered_keys)
         }
 
         fn process_unstake(&mut self, mut lsu_bucket: FungibleBucket, order_keys: Vec<u128>) -> (Bucket, FungibleBucket) {
@@ -1108,10 +1135,8 @@ mod liquify_module {
             let lsu_resource = lsu_bucket.resource_address();
             let initial_lsu_amount = lsu_bucket.amount();
             
-            // Pre-calculate redemption rate and check if this is a small order
+            // Calculate redemption rate
             let redemption_rate = validator.get_redemption_value(dec!(1));
-            let total_lsu_value = lsu_bucket.amount() * redemption_rate;
-            let require_auto_unstake_only = total_lsu_value < self.small_order_threshold;
             
             let mut remaining_lsus = lsu_bucket.amount();
             let mut remaining_value = remaining_lsus * redemption_rate;
@@ -1130,14 +1155,6 @@ mod liquify_module {
                 let global_id_option = self.buy_list.get(&key);
                 if global_id_option.is_none() {
                     continue;
-                }
-                
-                // ENFORCEMENT: Check auto_unstake requirement for small orders
-                if require_auto_unstake_only {
-                    let has_auto_unstake = BuyListKey::extract_auto_unstake(key);
-                    if !has_auto_unstake {
-                        continue; // Skip this order - doesn't meet auto_unstake requirement
-                    }
                 }
                 
                 let global_id = global_id_option.unwrap().clone();
