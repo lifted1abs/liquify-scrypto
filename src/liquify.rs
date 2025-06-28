@@ -207,6 +207,7 @@ mod liquify_module {
             set_minimum_refill_threshold => restrict_to: [owner];
             set_max_fills_per_cycle => restrict_to: [owner];
             set_unstake_value_range => restrict_to: [owner];
+            set_small_order_threshold => restrict_to: [owner];
             collect_platform_fees => restrict_to: [owner];
         }
     }
@@ -327,7 +328,7 @@ mod liquify_module {
                 total_xrd_locked: Decimal::ZERO,
                 component_status: false, 
                 order_fill_counter: 1,
-                platform_fee: dec!(0.00),
+                platform_fee: dec!(0.0005), // 0.0005 = 0.05% platform fee
                 fee_vault: Vault::new(XRD),
                 minimum_liquidity: dec!(10000),
                 minimum_refill_threshold: dec!(10000),
@@ -338,7 +339,7 @@ mod liquify_module {
                 automated_liquidity: KeyValueStore::new_with_registered_type(),
                 automated_liquidity_index: 1,
                 max_fills_per_cycle: 50,
-                small_order_threshold: dec!(100), 
+                small_order_threshold: dec!(1000), 
             }
             .instantiate()
             .prepare_to_globalize(
@@ -382,6 +383,7 @@ mod liquify_module {
                     get_active_liquidity_positions => Free, updatable;
                     set_minimum_refill_threshold => Free, updatable;
                     set_unstake_value_range => Free, updatable;
+                    set_small_order_threshold => Free, updatable;
                     get_automation_ready_receipts => Free, updatable;
                     get_receipt_detail => Free, updatable;
 
@@ -1319,7 +1321,7 @@ mod liquify_module {
             let mut all_updates = vec![];
             
             // Track event data
-            let mut event_data_per_receipt: std::collections::HashMap<NonFungibleLocalId, (u64, Vec<(Decimal, ResourceAddress)>, Vec<NonFungibleGlobalId>)> = std::collections::HashMap::new();
+            let mut event_data_per_receipt: HashMap<NonFungibleLocalId, (u64, Vec<(Decimal, ResourceAddress)>, Vec<NonFungibleGlobalId>)> = HashMap::new();
 
             for order_id in liquidity_receipt_bucket.as_non_fungible().non_fungible_local_ids() {
                 let global_id = NonFungibleGlobalId::new(self.liquidity_receipt.address(), order_id.clone());
@@ -1509,6 +1511,7 @@ mod liquify_module {
             self.minimum_refill_threshold = min;
         }
 
+        // Controls the number of iterations allowed when using cycle_liquidity to prevent hitting limits during transactions
         pub fn set_max_fills_per_cycle(&mut self, max_fills: u64) {
             self.max_fills_per_cycle = max_fills;
         }
@@ -1516,6 +1519,23 @@ mod liquify_module {
         pub fn set_unstake_value_range(&mut self, min: Decimal, max: Decimal) {
             self.minimum_unstake_value = min;
             self.maximum_unstake_value = max;
+        }
+
+        /// Sets the small order threshold.
+        /// 
+        /// This method allows the owner to adjust the threshold below which orders are considered "small"
+        /// and will only match with liquidity positions that have auto_unstake enabled. This helps ensure
+        /// small orders don't get stuck with manual liquidity positions that may not be actively managed.
+        /// Only the holder of the owner badge can call this method.
+        /// 
+        /// # Arguments
+        /// * `threshold`: A `Decimal` representing the XRD value threshold for small orders
+        ///
+        /// # Returns
+        /// * None
+        pub fn set_small_order_threshold(&mut self, threshold: Decimal) {
+            assert!(threshold >= dec!(0), "Small order threshold cannot be negative");
+            self.small_order_threshold = threshold;
         }
 
         /// Sets the receipt NFT image URL.
@@ -1792,16 +1812,6 @@ mod liquify_module {
             
             liquidity_ahead
         }
-
-        // Helper function to convert NFT ID to u32
-        fn nft_id_to_u32(local_id: &NonFungibleLocalId) -> u32 {
-            match local_id {
-                NonFungibleLocalId::Integer(i) => i.value() as u32,  // Cast u64 to u32
-                _ => panic!("Invalid NFT ID type")
-            }
-        }
-
-
 
     }
     
