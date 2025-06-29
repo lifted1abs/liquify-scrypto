@@ -1134,7 +1134,7 @@ mod liquify_module {
                 }
                 
                 // For small orders, only include keys with auto_unstake=true
-                if is_small_order && !BuyListKey::extract_auto_unstake(*avl_key) {
+                if is_small_order && BuyListKey::extract_auto_unstake(*avl_key) {
                     return scrypto_avltree::IterMutControl::Continue;
                 }
                 
