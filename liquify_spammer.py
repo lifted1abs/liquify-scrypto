@@ -255,6 +255,7 @@ async def start_spamming_liquidity(spammer_info: SpammerInfo, total_to_spam: int
     
     amount_spammed = 0
     refill_threshold = 10000  # Always hardcoded to 10000
+    automation_fee = 5  # Hardcoded automation fee
 
     while amount_spammed < total_to_spam:
         # Calculate discount
@@ -282,7 +283,7 @@ async def start_spamming_liquidity(spammer_info: SpammerInfo, total_to_spam: int
         liquidity_receipt = spammer_info.config.get('LIQUIFY_LIQUIDITY_RECEIPT', '')
 
         # Debug output before building manifest
-        print(f"Preparing to add {amount} XRD with {discount/1000:.3f}% discount, auto_unstake={auto_unstake}, auto_refill={auto_refill}, threshold={refill_threshold}")
+        print(f"Preparing to add {amount} XRD with {discount/1000:.3f}% discount, auto_unstake={auto_unstake}, auto_refill={auto_refill}, threshold={refill_threshold}, automation_fee={automation_fee}")
         
         # Create the manifest with the specified parameters
         manifest_string = f"""
@@ -309,6 +310,7 @@ async def start_spamming_liquidity(spammer_info: SpammerInfo, total_to_spam: int
             {"true" if auto_unstake else "false"}
             {"true" if auto_refill else "false"}
             Decimal("{refill_threshold}")
+            Decimal("{automation_fee}")
         ;
         TAKE_ALL_FROM_WORKTOP
             Address("{liquidity_receipt}")
@@ -343,7 +345,7 @@ async def start_spamming_liquidity(spammer_info: SpammerInfo, total_to_spam: int
                 spammer_info
             )
 
-            print(f"{get_timestamp()}: {signed_transaction.intent_hash().as_str()} - Using account {spammer_info.account.as_str()} to provide {amount} XRD of liquidity with a discount of {discount / 1000}%, auto_unstake={auto_unstake}, auto_refill={auto_refill}. Receipt will be sent to {DEV_ADDRESS}")
+            print(f"{get_timestamp()}: {signed_transaction.intent_hash().as_str()} - Using account {spammer_info.account.as_str()} to provide {amount} XRD of liquidity with a discount of {discount / 1000}%, auto_unstake={auto_unstake}, auto_refill={auto_refill}, automation_fee={automation_fee}. Receipt will be sent to {DEV_ADDRESS}")
             
             # Submit transaction
             await submit_transaction(
@@ -365,7 +367,6 @@ async def start_spamming_liquidity(spammer_info: SpammerInfo, total_to_spam: int
 
     print(f"Done spamming {amount_spammed:,} XRD")
     exit()
-
 #
 # Spam the Liquify component with ~105M XRD in unstakes
 #

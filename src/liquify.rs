@@ -32,6 +32,7 @@ pub struct AutomationReadyReceipt {
     pub fills_to_collect: u64,
     pub claimable_xrd: Decimal,
     pub refill_threshold: Decimal,
+    pub automation_fee: Decimal,
 }
 
 #[derive(NonFungibleData, ScryptoSbor, PartialEq, Debug, Clone)]
@@ -342,7 +343,7 @@ mod liquify_module {
                 fee_vault: Vault::new(XRD),
                 minimum_liquidity: dec!(10000),
                 minimum_refill_threshold: dec!(10000),
-                minimum_unstake_value: dec!(1000),
+                minimum_unstake_value: dec!(0),
                 maximum_unstake_value: dec!(10000000),
                 receipt_image_url: Url::of("https://bafybeib7cokm27lwwkunaibn7hczijn3ztkypbzttmt7hymaov44s5e5sm.ipfs.w3s.link/liquify2.png"),
                 automation_fee: dec!(5),
@@ -1102,10 +1103,26 @@ mod liquify_module {
         pub fn liquify_unstake(&mut self, lsu_bucket: FungibleBucket, max_iterations: u8) -> (Bucket, FungibleBucket) {
             assert!(self.validate_lsu(lsu_bucket.resource_address()), "Bucket must contain a native Radix Validator LSU");
 
-            // Pre-calculate if this is a small order
+            // Pre-calculate total value and validate min/max
             let validator = self.get_validator_from_lsu(lsu_bucket.resource_address());
             let redemption_rate = validator.get_redemption_value(dec!(1));
             let total_lsu_value = lsu_bucket.amount() * redemption_rate;
+            
+            // Enforce min/max unstake values
+            assert!(
+                total_lsu_value >= self.minimum_unstake_value,
+                "Unstake value of {} XRD is below minimum requirement of {} XRD",
+                total_lsu_value,
+                self.minimum_unstake_value
+            );
+            assert!(
+                total_lsu_value <= self.maximum_unstake_value,
+                "Unstake value of {} XRD exceeds maximum limit of {} XRD",
+                total_lsu_value,
+                self.maximum_unstake_value
+            );
+            
+            // Check if this is a small order
             let is_small_order = total_lsu_value < self.small_order_threshold;
 
             let mut order_keys = Vec::new();
@@ -1117,7 +1134,7 @@ mod liquify_module {
                 }
                 
                 // For small orders, only include keys with auto_unstake=true
-                if is_small_order && BuyListKey::extract_auto_unstake(*avl_key) {
+                if is_small_order && !BuyListKey::extract_auto_unstake(*avl_key) {
                     return scrypto_avltree::IterMutControl::Continue;
                 }
                 
@@ -1148,10 +1165,26 @@ mod liquify_module {
         pub fn liquify_unstake_off_ledger(&mut self, lsu_bucket: FungibleBucket, order_keys: Vec<u128>) -> (Bucket, FungibleBucket) {
             assert!(self.validate_lsu(lsu_bucket.resource_address()), "Bucket must contain a native Radix Validator LSU");
             
-            // Pre-calculate if this is a small order
+            // Pre-calculate total value and validate min/max
             let validator = self.get_validator_from_lsu(lsu_bucket.resource_address());
             let redemption_rate = validator.get_redemption_value(dec!(1));
             let total_lsu_value = lsu_bucket.amount() * redemption_rate;
+            
+            // Enforce min/max unstake values
+            assert!(
+                total_lsu_value >= self.minimum_unstake_value,
+                "Unstake value of {} XRD is below minimum requirement of {} XRD",
+                total_lsu_value,
+                self.minimum_unstake_value
+            );
+            assert!(
+                total_lsu_value <= self.maximum_unstake_value,
+                "Unstake value of {} XRD exceeds maximum limit of {} XRD",
+                total_lsu_value,
+                self.maximum_unstake_value
+            );
+            
+            // Check if this is a small order
             let is_small_order = total_lsu_value < self.small_order_threshold;
             
             // Filter order keys if it's a small order
@@ -1689,6 +1722,7 @@ mod liquify_module {
                             fills_to_collect,
                             claimable_xrd,
                             refill_threshold: nft_data.refill_threshold,
+                            automation_fee: nft_data.automation_fee,
                         });
                         
                         if ready_receipts.len() >= batch_size as usize {
