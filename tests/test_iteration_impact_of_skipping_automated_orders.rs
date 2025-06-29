@@ -214,6 +214,7 @@ impl TestEnvironment {
                 false,           // auto_unstake
                 false,           // auto_refill
                 dec!("0"),       // refill_threshold
+                dec!("5"),       // automation_fee
             )})
             .call_method(
                 user_account_address4,
@@ -239,6 +240,7 @@ impl TestEnvironment {
                 true,            // auto_unstake
                 false,           // auto_refill
                 dec!("0"),       // refill_threshold
+                dec!("5"),       // automation_fee
             )})
             .call_method(
                 user_account_address5,
@@ -264,6 +266,7 @@ impl TestEnvironment {
                 true,             // auto_unstake (required for auto_refill)
                 true,             // auto_refill
                 dec!("10000"),    // refill_threshold
+                dec!("5"),       // automation_fee
             )})
             .call_method(
                 user_account_address6,
@@ -387,6 +390,7 @@ fn test_iteration_impact_of_skipping_automated_orders() {
                 true,           // auto_unstake = TRUE (will be skipped)
                 false,          // auto_refill
                 dec!("0"),      // refill_threshold
+                dec!("5"),       // automation_fee
             )})
             .call_method(
                 user_account4,
@@ -422,6 +426,7 @@ fn test_iteration_impact_of_skipping_automated_orders() {
                 false,          // auto_unstake = FALSE (can be filled)
                 false,          // auto_refill
                 dec!("0"),      // refill_threshold
+                dec!("5"),       // automation_fee
             )})
             .call_method(
                 user_account4,

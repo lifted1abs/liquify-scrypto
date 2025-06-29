@@ -238,6 +238,7 @@ fn test_small_order_threshold_enforcement() {
             true,              // auto_unstake = TRUE (should be skipped for small orders)
             false,             // auto_refill
             dec!("0"),         // refill_threshold
+            dec!("5"),       // automation_fee
         )})
         .call_method(
             user_account2,
@@ -262,6 +263,7 @@ fn test_small_order_threshold_enforcement() {
             false,             // auto_unstake = FALSE (should be used for small orders)
             false,             // auto_refill
             dec!("0"),         // refill_threshold
+            dec!("5"),       // automation_fee
         )})
         .call_method(
             user_account2,

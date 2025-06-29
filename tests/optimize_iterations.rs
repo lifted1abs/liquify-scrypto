@@ -177,6 +177,7 @@ impl TestEnvironment {
                         true,           // auto_unstake
                         true,           // auto_refill
                         dec!("10000"),  // refill_threshold
+                        dec!("5"),      // automation_fee
                     )})
                     .call_method(
                         user_account_address4,

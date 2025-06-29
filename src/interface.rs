@@ -91,7 +91,7 @@ mod interface_module {
             auto_unstake: bool,
             auto_refill: bool,
             refill_threshold: Decimal,
-            automation_fee: Decimal
+            automation_fee: Decimal 
         ) -> NonFungibleBucket {
             
             let liquify_component: Global<Liquify> = self.active_liquify_component.unwrap().into();
@@ -102,7 +102,7 @@ mod interface_module {
                 auto_unstake,
                 auto_refill,
                 refill_threshold,
-                automation_fee
+                automation_fee  
             );
 
             receipt_bucket

@@ -247,6 +247,7 @@ fn test_platform_fees() {
                 false,            // auto_unstake
                 false,            // auto_refill
                 dec!("0"),        // refill_threshold
+                dec!("5"),       // automation_fee
             )})
             .call_method(
                 user_account4,

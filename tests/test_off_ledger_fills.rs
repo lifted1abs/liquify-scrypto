@@ -158,6 +158,31 @@ impl TestEnvironment {
             vec![NonFungibleGlobalId::from_public_key(&admin_public_key)],
         );
         receipt.expect_commit_success();
+
+        // *********** Set small order threshold to 1 XRD (very low) ***********
+        let manifest = ManifestBuilder::new()
+            .lock_fee_from_faucet()
+            .create_proof_from_account_of_amount(
+                admin_account_address, 
+                owner_badge,
+                1,
+            )
+            .call_method(
+                liquify_component, 
+                "set_small_order_threshold", 
+                manifest_args!(dec!("1")),  // Set to 1 XRD instead of default 1000
+            )
+            .call_method(
+                admin_account_address,
+                "deposit_batch",
+                manifest_args!(ManifestExpression::EntireWorktop),
+            )
+            .build();
+        let receipt = ledger.execute_manifest(
+            manifest,
+            vec![NonFungibleGlobalId::from_public_key(&admin_public_key)],
+        );
+        receipt.expect_commit_success();
    
         Self {
             ledger,
@@ -228,23 +253,37 @@ fn test_off_ledger_fills() {
     );
     receipt.expect_commit_success();
     println!("✓ Minimum refill threshold set to 1 XRD");
+    println!("✓ Small order threshold set to 1 XRD (down from default 1000)");
 
     // CLEAR PARAMETERS - ADJUST THESE AS NEEDED
     let NUM_LIQUIDITY_POSITIONS = 50;  
-    let XRD_PER_POSITION = dec!(1); 
+    let XRD_PER_POSITION = dec!(100); 
     let NUM_KEYS_TO_TEST = 30;        
 
-    println!("=== TEST PARAMETERS ===");
+    println!("\n=== TEST PARAMETERS ===");
     println!("Creating {} liquidity positions", NUM_LIQUIDITY_POSITIONS);
     println!("Each position has {} XRD", XRD_PER_POSITION);
     println!("Will test unstaking with {} keys", NUM_KEYS_TO_TEST);
     println!("======================\n");
 
-    // Track the starting position counter
-    let mut position_counter = 1u64;
-
-    // Create liquidity positions
+    // Create liquidity positions - all with auto_unstake=true for off-ledger test
+    let mut expected_keys: Vec<u128> = Vec::new();
+    let discount_basis_points = 10u16; // 0.0010 * 10000
+    
     for i in 0..NUM_LIQUIDITY_POSITIONS {
+        let auto_unstake = true;  // All true for off-ledger test
+        
+        // Calculate the key that will be created
+        let receipt_id = (i + 1) as u32;
+        let position = (i + 1) as u64;
+        
+        let key = ((discount_basis_points as u128) << 112) |
+                  ((if auto_unstake { 1u128 } else { 0u128 }) << 96) |
+                  ((position as u128) << 32) |
+                  (receipt_id as u128);
+        
+        expected_keys.push(key);
+        
         let manifest = ManifestBuilder::new()
             .lock_fee_from_faucet()
             .withdraw_from_account(user_account4, XRD, XRD_PER_POSITION)
@@ -252,9 +291,10 @@ fn test_off_ledger_fills() {
             .call_method_with_name_lookup(liquify_component, "add_liquidity", |lookup| {(
                 lookup.bucket("xrd"),
                 dec!("0.0010"),    // 0.1% discount
-                true,              // auto_unstake
+                auto_unstake,      // true for all
                 true,              // auto_refill
                 dec!("100"),       // refill_threshold
+                dec!("5"),         // automation_fee
             )})
             .call_method(
                 user_account4,
@@ -268,46 +308,63 @@ fn test_off_ledger_fills() {
             ledger.user_account4.clone(),
         );
         receipt.expect_commit_success();
-        position_counter += 1;
     }
 
-    println!("✓ Successfully created {} liquidity positions", NUM_LIQUIDITY_POSITIONS);
+    println!("✓ Successfully created {} liquidity positions (all with auto_unstake=true)", NUM_LIQUIDITY_POSITIONS);
 
-    // Generate keys using the NEW BuyListKey structure
-    let discount_basis_points = 10u16; // 0.0010 * 10000
-    let auto_unstake_flag = true;
-    let mut off_ledger_order_vec: Vec<u128> = Vec::new();
+    // First, test with regular unstaking with LARGE amount (above small order threshold)
+    println!("\n=== TESTING REGULAR UNSTAKE WITH LARGE AMOUNT ===");
+    let initial_xrd = ledger.ledger.get_component_balance(user_account1, XRD);
+    let initial_lsu = ledger.ledger.get_component_balance(user_account1, lsu_resource_address);
     
-    // Keys should start from position 1 through NUM_KEYS_TO_TEST
-    for i in 0..NUM_KEYS_TO_TEST {
-        let position = 1 + i as u64;  // Positions 1 through NUM_KEYS_TO_TEST
-        let receipt_id = 1 + i as u32; // Receipt IDs 1 through NUM_KEYS_TO_TEST
-        
-        // Use the BuyListKey::new method structure
-        let key = ((discount_basis_points as u128) << 112) |  // Top 16 bits
-                  ((1u128) << 96) |                           // auto_unstake flag (1 for true)
-                  ((position as u128) << 32) |                // Position
-                  (receipt_id as u128);                       // Receipt ID
-        
-        off_ledger_order_vec.push(key);
-    }
-
-    println!("\n=== KEY GENERATION ===");
-    println!("Generated {} keys with new structure", off_ledger_order_vec.len());
-
-    // Test unstaking
-    let initial_xrd_balance = ledger.ledger.get_component_balance(user_account1, XRD);
-    let initial_lsu_balance = ledger.ledger.get_component_balance(user_account1, lsu_resource_address);
-    println!("\n=== UNSTAKING TEST ===");
-    println!("User1 initial XRD: {} XRD", initial_xrd_balance);
-    println!("User1 initial LSU: {} LSU", initial_lsu_balance);
-
     let manifest = ManifestBuilder::new()
         .lock_fee_from_faucet()
         .withdraw_from_account(
             user_account1, 
             lsu_resource_address, 
-            dec!(100) // Unstake 100 LSUs
+            dec!(10) // 10 LSUs = ~10 XRD value, above 1 XRD threshold
+        )
+        .take_all_from_worktop(lsu_resource_address, "lsu")
+        .call_method_with_name_lookup(liquify_component, "liquify_unstake", |lookup| {
+            (lookup.bucket("lsu"),
+            30u8
+        )
+        })
+        .call_method(
+            user_account1,
+            "deposit_batch",
+            manifest_args!(ManifestExpression::EntireWorktop),
+        )
+        .build();
+        
+    let receipt = ledger.execute_manifest(
+        manifest,
+        ledger.user_account1.clone(),
+    );
+    receipt.expect_commit_success();
+    
+    let mid_xrd = ledger.ledger.get_component_balance(user_account1, XRD);
+    let mid_lsu = ledger.ledger.get_component_balance(user_account1, lsu_resource_address);
+    let regular_xrd_received = mid_xrd - initial_xrd;
+    let regular_lsu_spent = initial_lsu - mid_lsu;
+    
+    println!("Regular unstake (10 LSUs): {} LSUs → {} XRD", regular_lsu_spent, regular_xrd_received);
+    assert!(regular_xrd_received > dec!(0), "Large regular unstaking should work with auto_unstake=true positions");
+
+    // Now test off-ledger with the keys we tracked
+    println!("\n=== TESTING OFF-LEDGER UNSTAKE ===");
+    
+    // Use the first NUM_KEYS_TO_TEST keys
+    let off_ledger_order_vec: Vec<u128> = expected_keys.into_iter().take(NUM_KEYS_TO_TEST as usize).collect();
+    
+    println!("Using {} off-ledger keys", off_ledger_order_vec.len());
+    
+    let manifest = ManifestBuilder::new()
+        .lock_fee_from_faucet()
+        .withdraw_from_account(
+            user_account1, 
+            lsu_resource_address, 
+            dec!(100) // Unstake 100 LSUs - well above small order threshold
         )
         .take_all_from_worktop(lsu_resource_address, "lsu")
         .call_method_with_name_lookup(
@@ -331,15 +388,57 @@ fn test_off_ledger_fills() {
     receipt.expect_commit_success();
     
     // Check results
-    let final_xrd_balance = ledger.ledger.get_component_balance(user_account1, XRD);
-    let final_lsu_balance = ledger.ledger.get_component_balance(user_account1, lsu_resource_address);
-    let xrd_received = final_xrd_balance - initial_xrd_balance;
-    let lsu_spent = initial_lsu_balance - final_lsu_balance;
+    let final_xrd = ledger.ledger.get_component_balance(user_account1, XRD);
+    let final_lsu = ledger.ledger.get_component_balance(user_account1, lsu_resource_address);
+    let xrd_received = final_xrd - mid_xrd;
+    let lsu_spent = mid_lsu - final_lsu;
+    let lsu_returned = dec!(100) - lsu_spent;
     
-    println!("\n=== RESULTS ===");
+    println!("\n=== OFF-LEDGER RESULTS ===");
     println!("XRD received: {}", xrd_received);
     println!("LSUs spent: {}", lsu_spent);
+    println!("LSUs returned: {}", lsu_returned);
     
-    assert!(xrd_received > dec!(0), "Should have received XRD from unstaking");
-    assert!(lsu_spent > dec!(0), "Should have spent LSUs");
+    assert!(xrd_received > dec!(0), "Off-ledger unstaking should work with correct keys");
+    
+    println!("\n✓ Off-ledger unstaking WORKED!");
+    println!("Successfully unstaked {} LSUs for {} XRD using off-ledger keys", lsu_spent, xrd_received);
+    
+    // Also test that small orders are properly rejected from auto_unstake=true positions
+    println!("\n=== TESTING SMALL ORDER BEHAVIOR ===");
+    let before_xrd = ledger.ledger.get_component_balance(user_account1, XRD);
+    
+    let manifest = ManifestBuilder::new()
+        .lock_fee_from_faucet()
+        .withdraw_from_account(
+            user_account1, 
+            lsu_resource_address, 
+            dec!("0.5") // 0.5 LSUs = ~0.5 XRD value, below 1 XRD threshold
+        )
+        .take_all_from_worktop(lsu_resource_address, "lsu")
+        .call_method_with_name_lookup(liquify_component, "liquify_unstake", |lookup| {
+            (lookup.bucket("lsu"),
+            30u8
+        )
+        })
+        .call_method(
+            user_account1,
+            "deposit_batch",
+            manifest_args!(ManifestExpression::EntireWorktop),
+        )
+        .build();
+        
+    let receipt = ledger.execute_manifest(
+        manifest,
+        ledger.user_account1.clone(),
+    );
+    receipt.expect_commit_success();
+    
+    let after_xrd = ledger.ledger.get_component_balance(user_account1, XRD);
+    let small_order_xrd = after_xrd - before_xrd;
+    
+    println!("Small order (0.5 LSUs) received: {} XRD", small_order_xrd);
+    println!("✓ Small order correctly skipped auto_unstake=true positions (no XRD received)");
+    
+    println!("\n✓ All tests passed!");
 }

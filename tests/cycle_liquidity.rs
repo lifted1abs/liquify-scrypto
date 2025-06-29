@@ -211,6 +211,7 @@ fn test_cycle_liquidity_full_flow() {
             true,              // auto_unstake ENABLED
             true,              // auto_refill ENABLED
             dec!("200"),       // refill_threshold (200 XRD)
+            dec!("5"),         // automation_fee
         )})
         .call_method(
             user_account2,
@@ -358,7 +359,7 @@ fn test_cycle_liquidity_full_flow() {
         
         println!("\n=== CYCLE RESULTS ===");
         println!("Automation fee received: {} XRD", automation_fee_received);
-        println!("Expected fee: 5 XRD (default automation fee)");
+        println!("Expected fee: 5 XRD (automation fee set for this receipt)");
         
         assert!(automation_fee_received == dec!(5), "Expected 5 XRD automation fee");
     } else {

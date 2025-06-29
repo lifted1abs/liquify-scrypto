@@ -214,6 +214,7 @@ impl TestEnvironment {
                 false,           // auto_unstake
                 false,           // auto_refill
                 dec!("0"),       // refill_threshold
+                dec!("5"),      // automation_fee
             )})
             .call_method(
                 user_account_address4,
@@ -239,6 +240,7 @@ impl TestEnvironment {
                 true,            // auto_unstake
                 false,           // auto_refill
                 dec!("0"),       // refill_threshold
+                dec!("5"),      // automation_fee
             )})
             .call_method(
                 user_account_address5,
@@ -264,6 +266,7 @@ impl TestEnvironment {
                 true,             // auto_unstake (required for auto_refill)
                 true,             // auto_refill
                 dec!("10000"),    // refill_threshold
+                dec!("5"),      // automation_fee
             )})
             .call_method(
                 user_account_address6,

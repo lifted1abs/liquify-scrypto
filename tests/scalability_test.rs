@@ -233,6 +233,7 @@ fn test_add_liquidity_scaling() {
                 false,          // auto_unstake
                 false,          // auto_refill
                 dec!("0"),      // refill_threshold
+                dec!("5"),       // automation_fee
             )})
             .call_method(
                 user_account4,
@@ -267,6 +268,7 @@ fn test_add_liquidity_scaling() {
             false,              // auto_unstake
             false,              // auto_refill
             dec!("0"),          // refill_threshold
+            dec!("5"),       // automation_fee
         )})
         .call_method(
             user_account1,
@@ -323,6 +325,7 @@ fn test_unstake_scaling() {
                 false,          // auto_unstake
                 false,          // auto_refill
                 dec!("0"),      // refill_threshold
+                dec!("5"),       // automation_fee
             )})
             .call_method(
                 user_account4,
