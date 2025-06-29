@@ -34,7 +34,7 @@ DOCKER_IMAGE = "radixdlt/scrypto-builder:v1.2.0"
 DOCKER_PLATFORM = "linux/amd64"
 
 # Your personal address where you want owner badges sent
-PERSONAL_ADDRESS = "account_tdx_2_12yqz8dp4gu5wn70k66qqncuhh0hny77tag3ync44w0yrshpxumrj55"  # TODO: Update with mainnet address
+PERSONAL_ADDRESS = "account_tdx_2_1298qr4yymzfvjfqn48f5k00r79snw695zln0lxele0c2jgrwsdhwkc"  # TODO: Update with mainnet address
 
 # Gateway URL
 GATEWAY_URL = os.getenv('GATEWAY_URL')

@@ -12,7 +12,7 @@ from pathlib import Path
 # Endpoints for the Gateway API
 BASE_URL = "https://stokenet.radixdlt.com"
 
-DEV_ADDRESS = "account_tdx_2_12yqz8dp4gu5wn70k66qqncuhh0hny77tag3ync44w0yrshpxumrj55"
+DEV_ADDRESS = "account_tdx_2_1298qr4yymzfvjfqn48f5k00r79snw695zln0lxele0c2jgrwsdhwkc"
 
 # Bot config
 CREDS_FILENAME = "creds.json"

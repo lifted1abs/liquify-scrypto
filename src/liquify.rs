@@ -23,6 +23,7 @@ pub struct ReceiptDetailData {
     pub claimable_xrd: Decimal,
     pub total_stake_claim_value: Decimal,
     pub total_lsu_redemption_value: Decimal,
+    pub automation_fee: Decimal,
 }
 
 #[derive(ScryptoSbor, Debug, Clone)]
@@ -1696,6 +1697,7 @@ mod liquify_module {
                 claimable_xrd,
                 total_stake_claim_value,
                 total_lsu_redemption_value,
+                automation_fee: nft_data.automation_fee,  // ADD THIS
             }
         }
 
