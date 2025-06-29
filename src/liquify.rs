@@ -43,6 +43,8 @@ pub struct LiquidityReceipt {
     auto_refill: bool,
     #[mutable]
     refill_threshold: Decimal,
+    #[mutable]
+    automation_fee: Decimal,
 }
 
 #[derive(ScryptoSbor, PartialEq, Debug, Clone)]
@@ -117,6 +119,12 @@ struct RefillThresholdUpdatedEvent {
     refill_threshold: Decimal,
 }
 
+#[derive(ScryptoSbor, ScryptoEvent)]
+struct AutomationFeeUpdatedEvent {
+    receipt_id: NonFungibleLocalId,
+    automation_fee: Decimal,
+}
+
 pub struct BuyListKey;
 
 impl BuyListKey {
@@ -174,6 +182,8 @@ pub struct LSUData {
     LiquidityCycledEvent,
     AutoRefillStatusUpdatedEvent,
     RefillThresholdUpdatedEvent,
+    AutomationFeeUpdatedEvent,
+
 )]
 mod liquify_module {
     enable_method_auth! {
@@ -190,6 +200,7 @@ mod liquify_module {
             collect_fills => PUBLIC;
             update_auto_refill_status => PUBLIC;
             update_refill_threshold => PUBLIC;
+            update_automation_fee => PUBLIC;
             cycle_liquidity => PUBLIC;
             calculate_claimable_xrd_and_ordered_list => PUBLIC;
 
@@ -201,7 +212,6 @@ mod liquify_module {
 
             set_component_status => restrict_to: [owner];
             set_platform_fee => restrict_to: [owner];
-            set_automation_fee => restrict_to: [owner];
             set_minimum_liquidity => restrict_to: [owner];
             set_receipt_image_url => restrict_to: [owner];
             set_minimum_refill_threshold => restrict_to: [owner];
@@ -369,12 +379,12 @@ mod liquify_module {
                     collect_fills => Free, updatable;
                     update_auto_refill_status => Free, updatable;
                     update_refill_threshold => Free, updatable;
+                    update_automation_fee => Free, updatable;
                     cycle_liquidity => Free, updatable;
                     calculate_claimable_xrd_and_ordered_list => Free, updatable;
                     get_claimable_xrd => Free, updatable;
                     set_component_status => Free, updatable;
                     set_platform_fee => Free, updatable;
-                    set_automation_fee => Free, updatable;
                     set_max_fills_per_cycle => Free, updatable;
                     collect_platform_fees => Free, updatable;
                     set_minimum_liquidity => Free, updatable;
@@ -413,7 +423,15 @@ mod liquify_module {
         ///
         /// # Returns
         /// * A `NonFungibleBucket` containing the new liquidity receipt NFT that has been minted to track the liquidity
-        pub fn add_liquidity(&mut self, xrd_bucket: Bucket, discount: Decimal, auto_unstake: bool, auto_refill: bool, refill_threshold: Decimal) -> NonFungibleBucket {
+        pub fn add_liquidity(
+            &mut self, 
+            xrd_bucket: Bucket, 
+            discount: Decimal, 
+            auto_unstake: bool, 
+            auto_refill: bool, 
+            refill_threshold: Decimal,
+            automation_fee: Decimal
+            ) -> NonFungibleBucket {
             
             assert!(self.component_status == true, "Liquify is not accepting new liquidity at this time.");
             assert!(xrd_bucket.resource_address() == XRD, "Bucket must contain XRD");
@@ -449,6 +467,7 @@ mod liquify_module {
                 auto_unstake,
                 auto_refill,
                 refill_threshold,
+                automation_fee,
             };
 
             let new_liquidity_receipt: NonFungibleBucket = self.liquidity_receipt.mint_non_fungible(&id, liquidity_receipt_data);
@@ -682,6 +701,25 @@ mod liquify_module {
             receipt_bucket
         }
 
+        pub fn update_automation_fee(&mut self, receipt_bucket: Bucket, automation_fee: Decimal) -> Bucket {
+            assert!(receipt_bucket.resource_address() == self.liquidity_receipt.address(), "Bucket must contain Liquify liquidity receipt");
+            assert!(receipt_bucket.amount() == dec!(1), "Must provide exactly one liquidity receipt");
+            assert!(automation_fee >= dec!(0), "Automation fee cannot be negative");
+            
+            let local_id = receipt_bucket.as_non_fungible().non_fungible_local_id();
+            
+            // Update NFT data
+            self.liquidity_receipt.update_non_fungible_data(&local_id, "automation_fee", automation_fee);
+            
+            // Emit event if you want
+            Runtime::emit_event(AutomationFeeUpdatedEvent {
+                receipt_id: local_id,
+                automation_fee,
+            });
+            
+            receipt_bucket
+        }
+
         /// Cycles liquidity for one or more receipts by claiming fills and re-adding as liquidity.
         /// 
         /// This method processes liquidity receipts sequentially, cycling each one only if ALL its
@@ -799,9 +837,11 @@ mod liquify_module {
                     self.xrd_liquidity.put(total_xrd.into());
                     continue;
                 }
+                let nft_data: LiquidityReceipt = self.liquidity_receipt.get_non_fungible_data(&receipt_id);
+        
                 
                 // Take automation fee
-                let fee_amount = self.automation_fee;
+                let fee_amount = nft_data.automation_fee;
                 let automation_fee_bucket = total_xrd.take(fee_amount);
                 total_automation_fees.put(automation_fee_bucket);
                 
@@ -1489,23 +1529,6 @@ mod liquify_module {
         /// * None
         pub fn set_platform_fee(&mut self, fee: Decimal) {
             self.platform_fee = fee;
-        }
-
-        /// Sets the automation fee amount.
-        /// 
-        /// This method allows the owner to adjust the fee paid to callers who execute cycle_liquidity for
-        /// automated positions. The fee incentivizes external actors to monitor and cycle positions when
-        /// they reach their refill thresholds. The fee is paid from the claimed XRD before re-adding
-        /// liquidity. Only the holder of the owner badge can call this method.
-        /// 
-        /// # Arguments
-        /// * `new_fee`: A `Decimal` representing the fixed XRD amount paid per cycle operation
-        ///
-        /// # Returns
-        /// * None
-        pub fn set_automation_fee(&mut self, new_fee: Decimal) {
-            assert!(new_fee >= dec!(0), "Automation fee cannot be negative");
-            self.automation_fee = new_fee;
         }
 
         /// Sets the minimum liquidity requirement.
