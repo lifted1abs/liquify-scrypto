@@ -281,7 +281,7 @@ mod liquify_module {
                 .metadata(metadata!(
                     init {
                         "name" => "Liquify Owner Badge".to_string(), locked;
-                        "icon_url" => Url::of("https://bafybeif5tjpcgjgfo2lt6pp3qnz5s7mdpejfhgkracs7hzreoeg3bw3wae.ipfs.w3s.link/liquify_icon.png"), updatable;
+                        "icon_url" => Url::of("https://www.liquifyxrd.app/assets/logo_white_on_black.jpg"), updatable;
                     }
                 ))
                 .divisibility(DIVISIBILITY_NONE)
@@ -296,7 +296,7 @@ mod liquify_module {
                     init {
                         "name" => "Liquify Liquidity Receipt".to_owned(), updatable;
                         "description" => "Receipt for providing liquidity on the Liquify platform".to_string(), updatable;
-                        "icon_url" => Url::of("https://bafybeif5tjpcgjgfo2lt6pp3qnz5s7mdpejfhgkracs7hzreoeg3bw3wae.ipfs.w3s.link/liquify_icon.png"), updatable;
+                        "icon_url" => Url::of("https://www.liquifyxrd.app/assets/logo_white_on_black.jpg"), updatable;
                         "tags" => tags.clone(), updatable;
                     }
                 ))
@@ -346,7 +346,7 @@ mod liquify_module {
                 minimum_refill_threshold: dec!(10000),
                 minimum_unstake_value: dec!(0),
                 maximum_unstake_value: dec!(10000000),
-                receipt_image_url: Url::of("https://bafybeib7cokm27lwwkunaibn7hczijn3ztkypbzttmt7hymaov44s5e5sm.ipfs.w3s.link/liquify2.png"),
+                receipt_image_url: Url::of("https://www.liquifyxrd.app/assets/logo_2.jpg"),
                 automation_fee: dec!(5),
                 automated_liquidity: KeyValueStore::new_with_registered_type(),
                 automated_liquidity_index: 1,
