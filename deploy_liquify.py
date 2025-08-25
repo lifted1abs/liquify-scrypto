@@ -27,25 +27,53 @@ PACKAGE_NAME = "liquify_scrypto"
 BLUEPRINT_NAME = "Liquify"
 BLUEPRINT_FUNCTION = "instantiate_liquify"
 
-# Network Configuration
-NETWORK = "stokenet"  # "stokenet" or "mainnet"
-NETWORK_ID = 2 if NETWORK == "stokenet" else 1
+# Docker Configuration
 DOCKER_IMAGE = "radixdlt/scrypto-builder:v1.2.0"
 DOCKER_PLATFORM = "linux/amd64"
 
-# Your personal address where you want owner badges sent
-PERSONAL_ADDRESS = "account_tdx_2_1298qr4yymzfvjfqn48f5k00r79snw695zln0lxele0c2jgrwsdhwkc"
-
-# Gateway URL
-GATEWAY_URL = os.getenv('GATEWAY_URL')
-if not GATEWAY_URL:
-    if NETWORK == "stokenet":
-        GATEWAY_URL = "https://stokenet.radixdlt.com"
-    else:
-        GATEWAY_URL = "https://mainnet.radixdlt.com"
-    print(f"Using default gateway URL: {GATEWAY_URL}")
+# Network configurations
+NETWORK_CONFIGS = {
+    "mainnet": {
+        "network_id": 1,
+        "gateway_url": "https://mainnet.radixdlt.com",
+        "min_balance": 200,
+        "owner_resource": "resource_rdx1t5av9jksz5a2952qmhv5h7t2k0xt4vkv4wj7ekdchjkq435ujudss5"
+    },
+    "stokenet": {
+        "network_id": 2,
+        "gateway_url": "https://stokenet.radixdlt.com",
+        "min_balance": 100,
+        "owner_resource": "resource_tdx_2_1t40nwpv3ra5k34wy2nug6pds2mup7gszxwkgsg68mcvx550q6zmpkw"
+    }
+}
 
 # ===== END CONFIGURATION =====
+
+def ask_yes_no(question):
+    """Ask a yes/no question and return boolean."""
+    while True:
+        answer = input(f"{question} (y/n): ").lower().strip()
+        if answer in ['y', 'yes']:
+            return True
+        elif answer in ['n', 'no']:
+            return False
+        else:
+            print("Please answer 'y' or 'n'")
+
+def choose_network():
+    """Let user choose between mainnet and stokenet using numbers."""
+    print("\n=== Network Selection ===")
+    print("1) Mainnet (production)")
+    print("2) Stokenet (testnet)")
+    
+    while True:
+        choice = input("\nSelect network (1 or 2): ").strip()
+        if choice == "1":
+            return "mainnet"
+        elif choice == "2":
+            return "stokenet"
+        else:
+            print("Please enter 1 or 2")
 
 async def get_funds_from_faucet(gateway, account, public_key, private_key):
     """Get test XRD from the Stokenet faucet."""
@@ -88,7 +116,7 @@ async def get_funds_from_faucet(gateway, account, public_key, private_key):
 
 def build_with_docker():
     """Build the project using Docker."""
-    print("Building project with Docker...")
+    print("\n=== Building project with Docker ===")
     
     # Use current directory (should be the scrypto project)
     project_path = Path.cwd()
@@ -134,13 +162,17 @@ def build_with_docker():
         print(f"Error running Docker build: {e}")
         exit(1)
 
-def read_hex(file_path):
-    """Read a file and return its hex representation."""
-    with open(file_path, "rb") as f:
-        return f.read().hex()
-
 async def main():
     try:
+        # Choose network first - using numbers as requested
+        network = choose_network()
+        network_config = NETWORK_CONFIGS[network]
+        
+        print(f"\n=== Deploying to {network.upper()} ===")
+        print(f"Network ID: {network_config['network_id']}")
+        print(f"Gateway URL: {network_config['gateway_url']}")
+        print(f"Minimum balance required: {network_config['min_balance']} XRD")
+        
         # Save the current working directory (should be the scrypto project)
         scrypto_path = Path.cwd()
         
@@ -156,67 +188,81 @@ async def main():
         print(f"Script directory: {script_path}")
 
         # Set environment variable for Gateway
-        os.environ['GATEWAY_URL'] = GATEWAY_URL
+        os.environ['GATEWAY_URL'] = network_config['gateway_url']
 
         async with ClientSession(connector=TCPConnector(ssl=False)) as session:
             gateway = Gateway(session)
-            network_config = await gateway.network_configuration()
+            gateway_network_config = await gateway.network_configuration()
             
             # Check if we're on the correct network
-            if network_config['network_name'] != NETWORK:
-                print(f"Error: Expected {NETWORK} but connected to {network_config['network_name']}")
+            if gateway_network_config['network_name'] != network:
+                print(f"Error: Expected {network} but connected to {gateway_network_config['network_name']}")
                 exit(1)
             
             # Load or create account
-            account_details = load_account(network_config['network_id'])
+            account_details = load_account(gateway_network_config['network_id'])
             if account_details is None:
-                account_details = new_account(network_config['network_id'])
+                account_details = new_account(gateway_network_config['network_id'])
             private_key, public_key, account = account_details
 
-            print(f"Deploying with account: {account.as_str()}")
-            print(f"Network: {network_config['network_name']}")
+            print(f"\nDeploying with account: {account.as_str()}")
+            print(f"Network: {gateway_network_config['network_name']}")
 
-            # Check and get funds if needed
+            # Check balance
             balance = 0
             try:
                 balance = await gateway.get_xrd_balance(account)
             except Exception as e:
-                print(f"Note: Account not yet on network (expected for new accounts): {e}")
+                # This is expected for new accounts that haven't been used yet
+                print(f"Note: Account not yet on network (expected for new accounts)")
+                balance = 0
             
             print(f"Current balance: {balance} XRD")
             
-            # Get funds from faucet if balance is low and we're on Stokenet
-            if balance < 500 and NETWORK == "stokenet":
-                balance = await get_funds_from_faucet(gateway, account, public_key, private_key)
+            # Handle insufficient funds differently for mainnet vs stokenet
+            min_balance = network_config['min_balance']
             
-            # Check if we have sufficient funds
-            if balance < 100:
-                print('\n=== FUND ACCOUNT ===')
-                print(f'Address: {account.as_str()}')
-                print('Minimum 100 XRD required')
-                
-                if network_config['network_name'] == 'stokenet':
-                    print('Attempting to get more funds from faucet...')
-                    # Try faucet 3 more times
-                    for i in range(3):
-                        if balance >= 100:
-                            break
-                        print(f"Faucet attempt {i+2}...")
-                        balance = await get_funds_from_faucet(gateway, account, public_key, private_key)
-                        await asyncio.sleep(2)
+            if balance < min_balance:
+                if network == "stokenet":
+                    print(f"\n=== Insufficient balance (need {min_balance} XRD) ===")
+                    print("Attempting to get funds from faucet...")
                     
-                    if balance < 100:
-                        print('Please fund manually using faucet or run: python liquify_spammer.py')
+                    # Try faucet up to 3 times
+                    for i in range(3):
+                        balance = await get_funds_from_faucet(gateway, account, public_key, private_key)
+                        if balance >= min_balance:
+                            break
+                        if i < 2:
+                            print(f"Still insufficient ({balance} XRD). Trying again...")
+                            await asyncio.sleep(2)
+                    
+                    if balance < min_balance:
+                        print(f"\nFaucet didn't provide enough funds. Current balance: {balance} XRD")
+                        print(f"Please manually fund the account or run: python liquify_spammer.py")
                 else:
-                    print('Please send XRD to this address')
+                    # Mainnet - user must fund manually
+                    print(f"\n=== INSUFFICIENT FUNDS ===")
+                    print(f"Transaction failed due to insufficient XRD")
+                    print(f"Please send at least {min_balance} XRD to the following address:")
+                    print(f"\n{account.as_str()}\n")
+                    print(f"Current balance: {balance} XRD")
+                    print(f"Required: {min_balance} XRD")
                 
-                while balance < 100:
+                # Wait for funds for both networks
+                while balance < min_balance:
                     await asyncio.sleep(5)
-                    balance = await gateway.get_xrd_balance(account)
+                    try:
+                        balance = await gateway.get_xrd_balance(account)
+                        if int(balance) % 10 == 0 and balance > 0:  # Print every 10 XRD increment
+                            print(f"Current balance: {balance} XRD")
+                    except:
+                        pass  # Account might not exist yet
+
+            print(f"✓ Sufficient balance: {balance} XRD")
 
             # Load config or create new one
-            config_path = script_path / f"{NETWORK}.config.json"
-            print(f"Config path: {config_path}")
+            config_path = script_path / f"{network}.config.json"
+            print(f"\nConfig path: {config_path}")
             try:
                 with open(config_path, 'r') as config_file:
                     config_data = json.load(config_file)
@@ -235,47 +281,33 @@ async def main():
             # Change back to script directory
             os.chdir(script_path)
 
-            # Find WASM and RPD files - use Scrypto project path
+            # Find WASM and RPD files
             output_path = scrypto_path / "target" / "wasm32-unknown-unknown" / "release"
             wasm_file = output_path / f"{PACKAGE_NAME}.wasm"
             rpd_file = output_path / f"{PACKAGE_NAME}.rpd"
             
-            print(f"Looking for build artifacts at: {output_path}")
-            print(f"Checking for WASM file: {wasm_file}")
-            print(f"Checking for RPD file: {rpd_file}")
-            
             if not wasm_file.exists() or not rpd_file.exists():
                 print(f"Error: Build artifacts not found")
-                print("Let's check what's in the output directory:")
-                if output_path.exists():
-                    for file in output_path.glob("*"):
-                        print(f"  {file.name}")
-                else:
-                    print(f"  Directory doesn't exist: {output_path}")
                 exit(1)
-
-            print(f"Found WASM file: {wasm_file}")
-            print(f"Found RPD file: {rpd_file}")
 
             # Deploy package if not already deployed
             if 'LIQUIFY_PACKAGE' not in config_data:
                 print("\n=== Deploying Liquify Package ===")
                 
-                # Use exactly the same pattern as Surge deployment
                 import radix_engine_toolkit as ret
                 
-                # Create owner role for the package - using the resource address
+                # Create owner role for the package
                 owner_amount = '1'
-                owner_resource = 'resource_tdx_2_1t40nwpv3ra5k34wy2nug6pds2mup7gszxwkgsg68mcvx550q6zmpkw'  # Hardcoded as requested
+                owner_resource = network_config['owner_resource']
                 owner_role = ret.OwnerRole.UPDATABLE(ret.AccessRule.require_amount(ret.Decimal(owner_amount), ret.Address(owner_resource)))
                 
-                # Read the files as Surge does
+                # Read the files
                 with open(wasm_file, 'rb') as f:
                     code = f.read()
                 with open(rpd_file, 'rb') as f:
                     definition = f.read()
                 
-                # Use gateway.build_publish_transaction exactly like Surge
+                # Deploy package
                 payload, intent = await gateway.build_publish_transaction(
                     account,
                     code,
@@ -327,14 +359,13 @@ async def main():
                 print(f"LIQUIFY_OWNER_BADGE: {addresses[1]}")
                 print(f"LIQUIFY_LIQUIDITY_RECEIPT: {addresses[2]}")
 
-            # Set platform fee and enable the component BEFORE transferring badges
+            # Configure component if needed
             if 'LIQUIFY_COMPONENT' in config_data:
-                # First set platform fee
-                print("\n=== Setting Platform Fee ===")
-                
+                # Set platform fee - ask regardless of network
+                print("\n=== Platform Fee Configuration ===")
                 platform_fee_input = input("Enter platform fee percentage (e.g., 1 for 1%, 0.01 for 0.01%): ")
                 try:
-                    platform_fee = float(platform_fee_input) / 100  # Convert percentage to decimal
+                    platform_fee = float(platform_fee_input) / 100
                     print(f"Setting platform fee to {platform_fee_input}% ({platform_fee} as decimal)")
                     
                     manifest = f"""
@@ -361,7 +392,6 @@ async def main():
                     ;
                     """
                     
-                    print("Setting platform fee...")
                     payload, intent = await gateway.build_transaction_str(manifest, public_key, private_key)
                     await gateway.submit_transaction(payload)
                     status = await gateway.get_transaction_status(intent)
@@ -372,78 +402,83 @@ async def main():
                         print(f"✗ Failed to set platform fee: {status}")
                 
                 except ValueError:
-                    print("Invalid input for platform fee. Skipping fee configuration.")
+                    print("Invalid input for platform fee. Skipping.")
                 
-                # Now enable the component
-                print("\n=== Enabling Liquify Component ===")
-                
-                manifest = f"""
-                CALL_METHOD
-                    Address("{account.as_str()}")
-                    "lock_fee"
-                    Decimal("10")
-                ;
-                CALL_METHOD
-                    Address("{account.as_str()}")
-                    "create_proof_of_amount"
-                    Address("{config_data['LIQUIFY_OWNER_BADGE']}")
-                    Decimal("1")
-                ;
-                CALL_METHOD
-                    Address("{config_data['LIQUIFY_COMPONENT']}")
-                    "set_component_status"
-                    true
-                ;
-                CALL_METHOD
-                    Address("{account.as_str()}")
-                    "deposit_batch"
-                    Expression("ENTIRE_WORKTOP")
-                ;
-                """
-                
-                print("Enabling component...")
-                payload, intent = await gateway.build_transaction_str(manifest, public_key, private_key)
-                await gateway.submit_transaction(payload)
-                status = await gateway.get_transaction_status(intent)
-                
-                if status == "CommittedSuccess":
-                    print("✓ Component enabled successfully!")
-                else:
-                    print(f"✗ Failed to enable component: {status}")
+                # Enable component - ask regardless of network
+                print("\n=== Component Activation ===")
+                if ask_yes_no("Would you like to enable the component?"):
+                    manifest = f"""
+                    CALL_METHOD
+                        Address("{account.as_str()}")
+                        "lock_fee"
+                        Decimal("10")
+                    ;
+                    CALL_METHOD
+                        Address("{account.as_str()}")
+                        "create_proof_of_amount"
+                        Address("{config_data['LIQUIFY_OWNER_BADGE']}")
+                        Decimal("1")
+                    ;
+                    CALL_METHOD
+                        Address("{config_data['LIQUIFY_COMPONENT']}")
+                        "set_component_status"
+                        true
+                    ;
+                    CALL_METHOD
+                        Address("{account.as_str()}")
+                        "deposit_batch"
+                        Expression("ENTIRE_WORKTOP")
+                    ;
+                    """
+                    
+                    payload, intent = await gateway.build_transaction_str(manifest, public_key, private_key)
+                    await gateway.submit_transaction(payload)
+                    status = await gateway.get_transaction_status(intent)
+                    
+                    if status == "CommittedSuccess":
+                        print("✓ Component enabled successfully!")
+                    else:
+                        print(f"✗ Failed to enable component: {status}")
 
-            # Transfer owner badges to your personal address AFTER enabling
-            if 'LIQUIFY_OWNER_BADGE' in config_data and PERSONAL_ADDRESS:
-                print("\n=== Transferring Owner Badges ===")
-                
-                manifest = f"""
-                CALL_METHOD
-                    Address("{account.as_str()}")
-                    "lock_fee"
-                    Decimal("10")
-                ;
-                CALL_METHOD
-                    Address("{account.as_str()}")
-                    "withdraw"
-                    Address("{config_data['LIQUIFY_OWNER_BADGE']}")
-                    Decimal("1")
-                ;
-                CALL_METHOD
-                    Address("{PERSONAL_ADDRESS}")
-                    "try_deposit_batch_or_abort"
-                    Expression("ENTIRE_WORKTOP")
-                    Enum<0u8>()
-                ;
-                """
-                
-                print(f"Transferring owner badge to: {PERSONAL_ADDRESS}")
-                payload, intent = await gateway.build_transaction_str(manifest, public_key, private_key)
-                await gateway.submit_transaction(payload)
-                status = await gateway.get_transaction_status(intent)
-                
-                if status == "CommittedSuccess":
-                    print("✓ Owner badges successfully transferred!")
-                else:
-                    print(f"✗ Transfer failed with status: {status}")
+            # Transfer owner badges if desired
+            if 'LIQUIFY_OWNER_BADGE' in config_data:
+                print("\n=== Owner Badge Transfer ===")
+                if ask_yes_no("Would you like to transfer the owner badge to another account?"):
+                    personal_address = input("Enter the destination account address: ").strip()
+                    
+                    # Validate address format
+                    if personal_address.startswith("account_"):
+                        manifest = f"""
+                        CALL_METHOD
+                            Address("{account.as_str()}")
+                            "lock_fee"
+                            Decimal("10")
+                        ;
+                        CALL_METHOD
+                            Address("{account.as_str()}")
+                            "withdraw"
+                            Address("{config_data['LIQUIFY_OWNER_BADGE']}")
+                            Decimal("1")
+                        ;
+                        CALL_METHOD
+                            Address("{personal_address}")
+                            "try_deposit_batch_or_abort"
+                            Expression("ENTIRE_WORKTOP")
+                            Enum<0u8>()
+                        ;
+                        """
+                        
+                        print(f"Transferring owner badge to: {personal_address}")
+                        payload, intent = await gateway.build_transaction_str(manifest, public_key, private_key)
+                        await gateway.submit_transaction(payload)
+                        status = await gateway.get_transaction_status(intent)
+                        
+                        if status == "CommittedSuccess":
+                            print("✓ Owner badge successfully transferred!")
+                        else:
+                            print(f"✗ Transfer failed with status: {status}")
+                    else:
+                        print("Invalid address format. Skipping transfer.")
 
             # Save updated config
             print(f"\nSaving config to: {config_path}")
@@ -452,6 +487,7 @@ async def main():
             print(f"✓ Configuration saved to {config_path}")
 
             print("\n=== Deployment Complete ===")
+            print(f"Network: {network}")
             print(f"Package address: {config_data.get('LIQUIFY_PACKAGE', 'N/A')}")
             print(f"Component address: {config_data.get('LIQUIFY_COMPONENT', 'N/A')}")
             print(f"Owner badge: {config_data.get('LIQUIFY_OWNER_BADGE', 'N/A')}")
