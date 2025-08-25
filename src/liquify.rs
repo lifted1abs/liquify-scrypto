@@ -1697,7 +1697,7 @@ mod liquify_module {
                 claimable_xrd,
                 total_stake_claim_value,
                 total_lsu_redemption_value,
-                automation_fee: nft_data.automation_fee,  // ADD THIS
+                automation_fee: nft_data.automation_fee, 
             }
         }
 
