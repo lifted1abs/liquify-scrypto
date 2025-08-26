@@ -602,9 +602,9 @@ mod liquify_module {
             let index_usize = (nft_data.discount / dec!(0.00025)).checked_floor().unwrap().to_string().parse::<usize>().unwrap();
 
             if nft_data.auto_unstake {
-                self.liquidity_index_auto_unstake_true[index_usize] += xrd_bucket.amount();
+                self.liquidity_index_auto_unstake_true[index_usize] += additional_xrd_amount;
             } else {
-                self.liquidity_index_auto_unstake_false[index_usize] += xrd_bucket.amount();
+                self.liquidity_index_auto_unstake_false[index_usize] += additional_xrd_amount;
             }
             
             self.total_xrd_locked += additional_xrd_amount;
