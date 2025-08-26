@@ -1,12 +1,6 @@
 use scrypto::prelude::*;
 use scrypto_avltree::AvlTree;
 
-#[derive(ScryptoSbor, Debug, Clone)]
-pub struct LiquidityByType {
-    pub auto_unstake_false: Decimal,
-    pub auto_unstake_true: Decimal,
-}
-
 #[derive(ScryptoSbor, NonFungibleData, Debug)]
 pub struct UnstakeData {
     pub name: String,
@@ -244,7 +238,7 @@ mod liquify_module {
         component_status: bool,
         order_fill_counter: u64,
         avl_position_counter: u64,  
-        liquidity_index: Vec<LiquidityByType>,
+        liquidity_index: Vec<(Decimal, Decimal)>, 
         discounts: Vec<Decimal>,
         platform_fee: Decimal,
         fee_vault: Vault,
@@ -320,18 +314,15 @@ mod liquify_module {
                 })
                 .create_with_no_initial_supply();
             
-                let mut liquidity_index: Vec<LiquidityByType> = Vec::new();
-                let mut discounts: Vec<Decimal> = Vec::new();
-                let step: Decimal = dec!(0.00025);
+            let mut liquidity_index: Vec<(Decimal, Decimal)> = Vec::new();
+            let mut discounts: Vec<Decimal> = Vec::new();
+            let step: Decimal = dec!(0.00025);
 
-                for i in 0..=200 {
-                    let discount = step * Decimal::from(i);
-                    liquidity_index.push(LiquidityByType {
-                        auto_unstake_false: Decimal::ZERO,
-                        auto_unstake_true: Decimal::ZERO,
-                    });
-                    discounts.push(discount);
-                }
+            for i in 0..=200 {
+                let discount = step * Decimal::from(i);
+                liquidity_index.push((Decimal::ZERO, Decimal::ZERO));  // Changed: now a tuple
+                discounts.push(discount);
+            }
 
             let liquify_component = Liquify {
                 liquify_owner_badge: liquify_owner_badge.resource_address(),
@@ -510,9 +501,9 @@ mod liquify_module {
             };
 
             if auto_unstake {
-                self.liquidity_index[index_usize].auto_unstake_true += xrd_bucket.amount();
+                self.liquidity_index[index_usize].1 += xrd_bucket.amount();  // .1 for auto_unstake_true
             } else {
-                self.liquidity_index[index_usize].auto_unstake_false += xrd_bucket.amount();
+                self.liquidity_index[index_usize].0 += xrd_bucket.amount();  // .0 for auto_unstake_false
             }
 
             self.total_xrd_locked += xrd_bucket.amount();
@@ -607,9 +598,9 @@ mod liquify_module {
             let index_usize = (nft_data.discount / dec!(0.00025)).checked_floor().unwrap().to_string().parse::<usize>().unwrap();
 
             if nft_data.auto_unstake {
-                self.liquidity_index[index_usize].auto_unstake_true += additional_xrd_amount;
+                self.liquidity_index[index_usize].1 += additional_xrd_amount;
             } else {
-                self.liquidity_index[index_usize].auto_unstake_false += additional_xrd_amount;
+                self.liquidity_index[index_usize].0 += additional_xrd_amount;
             }
             
             self.total_xrd_locked += additional_xrd_amount;
@@ -909,9 +900,9 @@ mod liquify_module {
                 let index_usize = (nft_data.discount / dec!(0.00025)).checked_floor().unwrap().to_string().parse::<usize>().unwrap();
                 
                 if nft_data.auto_unstake {
-                    self.liquidity_index[index_usize].auto_unstake_true += xrd_to_add;
+                    self.liquidity_index[index_usize].1 += xrd_to_add;  // .1 for auto_unstake_true
                 } else {
-                    self.liquidity_index[index_usize].auto_unstake_false += xrd_to_add;
+                    self.liquidity_index[index_usize].0 += xrd_to_add;  // .0 for auto_unstake_false
                 }
                 
                 // Put XRD in vault
@@ -1068,9 +1059,9 @@ mod liquify_module {
             // Fourth pass: Update liquidity index
             for (_, _, nft_data, order_size, _, index) in &removal_data {
                 if nft_data.auto_unstake {
-                    self.liquidity_index[*index].auto_unstake_true -= *order_size;
+                    self.liquidity_index[*index].1 -= *order_size;
                 } else {
-                    self.liquidity_index[*index].auto_unstake_false -= *order_size;
+                    self.liquidity_index[*index].0 -= *order_size;
                 }
             }
 
@@ -1348,9 +1339,9 @@ mod liquify_module {
 
             for ((index, auto_unstake), total_fill) in index_updates {
                 if auto_unstake {
-                    self.liquidity_index[index].auto_unstake_true -= total_fill;
+                    self.liquidity_index[index].1 -= total_fill;
                 } else {
-                    self.liquidity_index[index].auto_unstake_false -= total_fill;
+                    self.liquidity_index[index].0 -= total_fill;
                 }
             }
 
