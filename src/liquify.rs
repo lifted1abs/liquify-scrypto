@@ -238,7 +238,8 @@ mod liquify_module {
         component_status: bool,
         order_fill_counter: u64,
         avl_position_counter: u64,  
-        liquidity_index: Vec<(Decimal, Decimal)>, 
+        liquidity_index_auto_unstake_false: Vec<Decimal>,  // 201 elements
+        liquidity_index_auto_unstake_true: Vec<Decimal>,   // 201 elements
         discounts: Vec<Decimal>,
         platform_fee: Decimal,
         fee_vault: Vault,
@@ -314,13 +315,15 @@ mod liquify_module {
                 })
                 .create_with_no_initial_supply();
             
-            let mut liquidity_index: Vec<(Decimal, Decimal)> = Vec::new();
+            let mut liquidity_index_auto_unstake_false: Vec<Decimal> = Vec::new();
+            let mut liquidity_index_auto_unstake_true: Vec<Decimal> = Vec::new();
             let mut discounts: Vec<Decimal> = Vec::new();
             let step: Decimal = dec!(0.00025);
 
             for i in 0..=200 {
                 let discount = step * Decimal::from(i);
-                liquidity_index.push((Decimal::ZERO, Decimal::ZERO));  // Changed: now a tuple
+                liquidity_index_auto_unstake_false.push(Decimal::ZERO);
+                liquidity_index_auto_unstake_true.push(Decimal::ZERO);
                 discounts.push(discount);
             }
 
@@ -334,7 +337,8 @@ mod liquify_module {
                 order_fill_tree: AvlTree::new(),
                 component_vaults: KeyValueStore::new_with_registered_type(),
                 liquidity_data: KeyValueStore::new_with_registered_type(),
-                liquidity_index,
+                liquidity_index_auto_unstake_false,
+                liquidity_index_auto_unstake_true,
                 discounts,
                 total_xrd_volume: Decimal::ZERO,
                 total_xrd_locked: Decimal::ZERO,
@@ -501,9 +505,9 @@ mod liquify_module {
             };
 
             if auto_unstake {
-                self.liquidity_index[index_usize].1 += xrd_bucket.amount();  // .1 for auto_unstake_true
+                self.liquidity_index_auto_unstake_true[index_usize] += xrd_bucket.amount();
             } else {
-                self.liquidity_index[index_usize].0 += xrd_bucket.amount();  // .0 for auto_unstake_false
+                self.liquidity_index_auto_unstake_false[index_usize] += xrd_bucket.amount();
             }
 
             self.total_xrd_locked += xrd_bucket.amount();
@@ -598,9 +602,9 @@ mod liquify_module {
             let index_usize = (nft_data.discount / dec!(0.00025)).checked_floor().unwrap().to_string().parse::<usize>().unwrap();
 
             if nft_data.auto_unstake {
-                self.liquidity_index[index_usize].1 += additional_xrd_amount;
+                self.liquidity_index_auto_unstake_true[index_usize] += xrd_bucket.amount();
             } else {
-                self.liquidity_index[index_usize].0 += additional_xrd_amount;
+                self.liquidity_index_auto_unstake_false[index_usize] += xrd_bucket.amount();
             }
             
             self.total_xrd_locked += additional_xrd_amount;
@@ -847,8 +851,6 @@ mod liquify_module {
                     self.xrd_liquidity.put(total_xrd.into());
                     continue;
                 }
-                let nft_data: LiquidityReceipt = self.liquidity_receipt.get_non_fungible_data(&receipt_id);
-        
                 
                 // Take automation fee
                 let fee_amount = nft_data.automation_fee;
@@ -900,9 +902,9 @@ mod liquify_module {
                 let index_usize = (nft_data.discount / dec!(0.00025)).checked_floor().unwrap().to_string().parse::<usize>().unwrap();
                 
                 if nft_data.auto_unstake {
-                    self.liquidity_index[index_usize].1 += xrd_to_add;  // .1 for auto_unstake_true
+                    self.liquidity_index_auto_unstake_true[index_usize] += xrd_to_add;
                 } else {
-                    self.liquidity_index[index_usize].0 += xrd_to_add;  // .0 for auto_unstake_false
+                    self.liquidity_index_auto_unstake_false[index_usize] += xrd_to_add;
                 }
                 
                 // Put XRD in vault
@@ -1059,9 +1061,9 @@ mod liquify_module {
             // Fourth pass: Update liquidity index
             for (_, _, nft_data, order_size, _, index) in &removal_data {
                 if nft_data.auto_unstake {
-                    self.liquidity_index[*index].1 -= *order_size;
+                    self.liquidity_index_auto_unstake_true[*index] -= *order_size;
                 } else {
-                    self.liquidity_index[*index].0 -= *order_size;
+                    self.liquidity_index_auto_unstake_false[*index] -= *order_size;
                 }
             }
 
@@ -1339,9 +1341,9 @@ mod liquify_module {
 
             for ((index, auto_unstake), total_fill) in index_updates {
                 if auto_unstake {
-                    self.liquidity_index[index].1 -= total_fill;
+                    self.liquidity_index_auto_unstake_true[index] -= total_fill;
                 } else {
-                    self.liquidity_index[index].0 -= total_fill;
+                    self.liquidity_index_auto_unstake_false[index] -= total_fill;
                 }
             }
 
