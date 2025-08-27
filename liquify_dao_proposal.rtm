@@ -14,8 +14,9 @@
 # mainnet dev address account_rdx128e6mrr8ak3gjcszq9t57rwv3evq756mhv86e37navy0greux3hyzm
 
 
-# Put token manifest
-# need to fix owner badge address here
+# This manifest takes the liquify owner badge from my account and deposits to the ILIS governance component
+# Withdraws 10,000 ilis to use to create proposal
+# Creates a dao proposal 
 
 CALL_METHOD
 Address("account_rdx128e6mrr8ak3gjcszq9t57rwv3evq756mhv86e37navy0greux3hyzm")
@@ -25,38 +26,28 @@ Decimal("1")
 ;
 TAKE_ALL_FROM_WORKTOP
 Address("resource_rdx1tkay6uzp3ere9q6ccw346rs39w4mwdu6k6vxz43y4zkj9yy3zu4gx2")
-Bucket("bucket1")
+Bucket("Liquify owner badge bucket")
 ;
 CALL_METHOD
 Address("component_rdx1czh6hmmgzxqdv4dza3mnvhja4c6m3y9h5k4063x4vqn4h40lq04j2n")
 "put_tokens"
-Bucket("bucket1")
+Bucket("Liquify owner badge bucket")
 ;
-
-
-
-# create proposal RTM from 10.14.24
-# need 10000 ILIS to create proposal
-# PDF of proposal
-
-
-
-
 CALL_METHOD
-    Address("account_rdx12xl2meqtelz47mwp3nzd72jkwyallg5yxr9hkc75ac4qztsxulfpew")
+    Address("account_rdx128e6mrr8ak3gjcszq9t57rwv3evq756mhv86e37navy0greux3hyzm")
     "withdraw"
     Address("resource_rdx1t4r86qqjtzl8620ahvsxuxaf366s6rf6cpy24psdkmrlkdqvzn47c2")
     Decimal("10000")
 ;
 TAKE_ALL_FROM_WORKTOP
     Address("resource_rdx1t4r86qqjtzl8620ahvsxuxaf366s6rf6cpy24psdkmrlkdqvzn47c2")
-    Bucket("bucket1")
+    Bucket("Ilis token bucket")
 ;
 CALL_METHOD
     Address("component_rdx1czh6hmmgzxqdv4dza3mnvhja4c6m3y9h5k4063x4vqn4h40lq04j2n")
     "create_proposal"
-    "Accepting Operating Agreement and Establishing Liquify Protocol Governance"
-    "This proposal aims to accept the newly updated Operational Agreement of the ILIS DAO, establish the DAO's governance over the STAB Protocol, implement incentives for using the protocol, allocate rewards for collateral price updaters, and adjust the DAO's voting parameters. It is the same as Proposal #1, but with correct on-chain execution."
+    "Establishing Liquify Protocol Governance"
+    "This proposal aims to establish the DAO's governance over the Liquify Protocol."
     Enum<1u8>(
         Array<Tuple>(
             Tuple(
@@ -84,20 +75,20 @@ CALL_METHOD
     )
     false
     false
-    Bucket("bucket1")
+    Bucket("Ilis token bucket")
 ;
 TAKE_ALL_FROM_WORKTOP
     Address("resource_rdx1ngwhlept050nw3evc6fk8stms9n44krh5f9efvl3clusuhlgsy5f8a")
-    Bucket("bucket2")
+    Bucket("incomplete proposal bucket")
 ;
 CREATE_PROOF_FROM_BUCKET_OF_ALL
-    Bucket("bucket2")
-    Proof("proof1")
+    Bucket("incomplete proposal bucket")
+    Proof("proof of proposal nft")
 ;
 CALL_METHOD
     Address("component_rdx1czh6hmmgzxqdv4dza3mnvhja4c6m3y9h5k4063x4vqn4h40lq04j2n")
     "add_proposal_step"
-    Proof("proof1")
+    Proof("proof of proposal nft")
     Address("component_rdx1cpj9kwxx4dqxu797dhkvtskhlxvxajl6ztkktxl9atqdtcqefk9dnh")
     Address("resource_rdx1tkay6uzp3ere9q6ccw346rs39w4mwdu6k6vxz43y4zkj9yy3zu4gx2")
     "send_tokens"
@@ -113,13 +104,13 @@ CALL_METHOD
     false
 ;
 CREATE_PROOF_FROM_BUCKET_OF_ALL
-    Bucket("bucket2")
-    Proof("proof2")
+    Bucket("incomplete proposal bucket")
+    Proof("proof of proposal nft2")
 ;
 CALL_METHOD
     Address("component_rdx1czh6hmmgzxqdv4dza3mnvhja4c6m3y9h5k4063x4vqn4h40lq04j2n")
     "add_proposal_step"
-    Proof("proof2")
+    Proof("proof of proposal nft2")
     Address("component_rdx1czh6hmmgzxqdv4dza3mnvhja4c6m3y9h5k4063x4vqn4h40lq04j2n")
     Address("resource_rdx1tkay6uzp3ere9q6ccw346rs39w4mwdu6k6vxz43y4zkj9yy3zu4gx2")
     "set_parameters"
@@ -143,7 +134,7 @@ CALL_METHOD
     Proof("proof3")
 ;
 CALL_METHOD
-    Address("account_rdx12xl2meqtelz47mwp3nzd72jkwyallg5yxr9hkc75ac4qztsxulfpew")
+    Address("account_rdx128e6mrr8ak3gjcszq9t57rwv3evq756mhv86e37navy0greux3hyzm")
     "deposit"
     Bucket("bucket2")
 ;
