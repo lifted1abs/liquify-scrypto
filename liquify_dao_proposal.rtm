@@ -19,19 +19,19 @@
 # Creates a dao proposal 
 
 CALL_METHOD
-Address("account_rdx128e6mrr8ak3gjcszq9t57rwv3evq756mhv86e37navy0greux3hyzm")
-"withdraw"
-Address("resource_rdx1tkay6uzp3ere9q6ccw346rs39w4mwdu6k6vxz43y4zkj9yy3zu4gx2")
-Decimal("1")
+    Address("account_rdx128e6mrr8ak3gjcszq9t57rwv3evq756mhv86e37navy0greux3hyzm")
+    "withdraw"
+    Address("resource_rdx1tkay6uzp3ere9q6ccw346rs39w4mwdu6k6vxz43y4zkj9yy3zu4gx2")
+    Decimal("1")
 ;
 TAKE_ALL_FROM_WORKTOP
-Address("resource_rdx1tkay6uzp3ere9q6ccw346rs39w4mwdu6k6vxz43y4zkj9yy3zu4gx2")
-Bucket("Liquify owner badge bucket")
+    Address("resource_rdx1tkay6uzp3ere9q6ccw346rs39w4mwdu6k6vxz43y4zkj9yy3zu4gx2")
+    Bucket("Liquify owner badge bucket")
 ;
 CALL_METHOD
-Address("component_rdx1czh6hmmgzxqdv4dza3mnvhja4c6m3y9h5k4063x4vqn4h40lq04j2n")
-"put_tokens"
-Bucket("Liquify owner badge bucket")
+    Address("component_rdx1czh6hmmgzxqdv4dza3mnvhja4c6m3y9h5k4063x4vqn4h40lq04j2n")
+    "put_tokens"
+    Bucket("Liquify owner badge bucket")
 ;
 CALL_METHOD
     Address("account_rdx128e6mrr8ak3gjcszq9t57rwv3evq756mhv86e37navy0greux3hyzm")

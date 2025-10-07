@@ -127,7 +127,7 @@ async def main():
             print("Exiting now.")
             exit()     
 
-    # Spam liquidity
+# Spam liquidity
     if choice == 2:
         # Get total amount to spam
         total_to_spam = int(input("\nHow much XRD to spam in total? "))
@@ -145,14 +145,18 @@ async def main():
             print("Will use random amounts between 10,000 and 100,000 XRD")
         
         # Discount type submenu
-        discount_type = int(input("\nChoose discount type:\n1) Random discount (0.5-1.5%)\n2) Set discount\n"))
+        discount_type = int(input("\nChoose discount type:\n1) Random discount (0.5-1.5%)\n2) Set discount\n3) Full range (0-5% in 0.025% increments)\n"))
         
         if discount_type == 2:
             # Set discount option
             set_discount = float(input("\nEnter discount percentage (e.g., 1.25 for 1.25%): "))
             print(f"Will use {set_discount}% discount for all transactions")
+        elif discount_type == 3:
+            # Full range option
+            set_discount = None
+            print("Will use random discounts across full 0-5% range (0.025% increments)")
         else:
-            # Random discount (default)
+            # Random discount (default 0.5-1.5%)
             set_discount = None
             print("Will use random discounts between 0.5% and 1.5%")
         
@@ -171,10 +175,15 @@ async def main():
         start_spamming_question = input("\n!! Double-check your input !!\n\nStart spamming liquidity? y/n: ")
     
         if (start_spamming_question.lower() == "y"):
-            await start_spamming_liquidity(spammer_info, total_to_spam, set_amount, set_discount, auto_unstake, auto_refill)
+            # Pass discount_type to determine if we're using full range
+            if discount_type == 3:
+                # Signal full range by passing None and let the function handle it
+                await start_spamming_liquidity(spammer_info, total_to_spam, set_amount, None, auto_unstake, auto_refill)
+            else:
+                await start_spamming_liquidity(spammer_info, total_to_spam, set_amount, set_discount, auto_unstake, auto_refill)
         else:
             print("Exiting now.")
-            exit()  
+            exit()
 
 # Spam unstakes
     if choice == 3:
@@ -262,7 +271,10 @@ async def start_spamming_liquidity(spammer_info: SpammerInfo, total_to_spam: int
         if set_discount is not None:
             discount = int(set_discount * 1000)  # Convert percentage to basis points (e.g., 1.25% -> 1250)
         else:
-            discount = random.randrange(500, 1_500, 25)  # 0.5-1.5% with steps of 0.025%
+            # Random discount from all 201 possible values (0% to 5% in 0.025% increments)
+            # 0.025% = 0.00025 = 25 basis points per step
+            discount_steps = random.randint(0, 200)  # 0 to 200 steps
+            discount = discount_steps * 25  # Each step is 25 basis points (0.025%)
         
         # Calculate amount for this transaction
         remaining = total_to_spam - amount_spammed
