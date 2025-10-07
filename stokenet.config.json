@@ -1,6 +1,9 @@
 {
-    "LIQUIFY_PACKAGE": "package_tdx_2_1pk8tqmunmkm88fagcap80chsqh0g8megw54087pxay87gtpkusgsp6",
-    "LIQUIFY_COMPONENT": "component_tdx_2_1cphxd04u2zyfkeh4emmwsdq703w2rq9elf9qzpyd2q0hdclmwlt2pk",
-    "LIQUIFY_OWNER_BADGE": "resource_tdx_2_1t4gkzmkwp8hqpssg0yrjmfen9pzvq9tjfpev9fg57fhhlqlz0u0ns4",
-    "LIQUIFY_LIQUIDITY_RECEIPT": "resource_tdx_2_1nghp6extk8ea7s4qj5nh7kq7jzaj4szjqhsgga5mzkzxvxm9ws47qm"
+    "PACKAGE_OWNER_BADGE": "resource_tdx_2_1t40nwpv3ra5k34wy2nug6pds2mup7gszxwkgsg68mcvx550q6zmpkw",
+    "LIQUIFY_PACKAGE": "package_tdx_2_1p4qzgtxvtzyz2n3rwvw3wsdxtaytcy4y0nvklwxhcwdufzsjkezdxy",
+    "LIQUIFY_COMPONENT": "component_tdx_2_1czr3gkwh62rg2vgyw8d2ee3st6xdmcnv9d2a3y8lxsv5gejeucj000",
+    "LIQUIFY_OWNER_BADGE": "resource_tdx_2_1t5qajckcdasg27u4m2dnlv5wpwrjgy7mnzfgzppm8fr3uael6qlt40",
+    "LIQUIFY_LIQUIDITY_RECEIPT": "resource_tdx_2_1nte64xrj89hrw5adyz0andcgj5ku3w6zndpmumhy8q4ejw5l7v2895",
+    "LIQUIFY_INTERFACE_COMPONENT": "component_tdx_2_1cqjdc2mnaw7ezh392atf0jpr0l7u039xlm6t0wy48xfadws4cv404v",
+    "LIQUIFY_INTERFACE_OWNER_BADGE": "resource_tdx_2_1tkg3t8crfmjvnxj26eckyrnh063xh5mw2j0yd8xn6uaexslqaq4cuq"
 }

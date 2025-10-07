@@ -446,7 +446,7 @@ async def main():
                     else:
                         print(f"✗ Failed to enable component: {status}")
 
-            # Deploy interface component if not already deployed
+# Deploy interface component if not already deployed
             if 'LIQUIFY_INTERFACE_COMPONENT' not in config_data:
                 print("\n=== Instantiating Liquify Interface Component ===")
                 
@@ -474,13 +474,17 @@ async def main():
                 print(f"Waiting for transaction: {intent}")
                 addresses = await gateway.get_new_addresses(intent)
                 
-                interface_owner_badge = addresses[0]
-                interface_component = addresses[1]
-                config_data['LIQUIFY_INTERFACE_OWNER_BADGE'] = interface_owner_badge
-                config_data['LIQUIFY_INTERFACE_COMPONENT'] = interface_component
+                print(f"\n=== DEBUG: All addresses returned ===")
+                for i, addr in enumerate(addresses):
+                    print(f"addresses[{i}]: {addr}")
                 
-                print(f"LIQUIFY_INTERFACE_OWNER_BADGE: {interface_owner_badge}")
+                interface_component = addresses[0]
+                interface_owner_badge_resource = addresses[1]
+                config_data['LIQUIFY_INTERFACE_COMPONENT'] = interface_component
+                config_data['LIQUIFY_INTERFACE_OWNER_BADGE'] = interface_owner_badge_resource
+                
                 print(f"LIQUIFY_INTERFACE_COMPONENT: {interface_component}")
+                print(f"LIQUIFY_INTERFACE_OWNER_BADGE: {interface_owner_badge_resource}")
 
             # Set interface target automatically
             if 'LIQUIFY_INTERFACE_COMPONENT' in config_data and 'LIQUIFY_COMPONENT' in config_data:
