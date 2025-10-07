@@ -38,7 +38,7 @@ mod interface_module {
     }
 
     impl LiquifyInterface {
-        pub fn instantiate_interface() -> (Bucket, Global<LiquifyInterface>) {
+        pub fn instantiate_interface() -> (Global<LiquifyInterface>, Bucket) {
 
             let (address_reservation, _component_address) =
                 Runtime::allocate_component_address(<LiquifyInterface>::blueprint_id());
@@ -76,7 +76,7 @@ mod interface_module {
             ))
             .globalize();
 
-            (liquify_interface_owner_badge, interface_component)
+            (interface_component, liquify_interface_owner_badge)
         } 
 
         pub fn set_interface_target(&mut self, component_address: ComponentAddress) {
