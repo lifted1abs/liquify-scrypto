@@ -26,6 +26,8 @@ from tools.manifests import lock_fee, deposit_all
 PACKAGE_NAME = "liquify_scrypto"
 BLUEPRINT_NAME = "Liquify"
 BLUEPRINT_FUNCTION = "instantiate_liquify"
+INTERFACE_BLUEPRINT_NAME = "LiquifyInterface"
+INTERFACE_FUNCTION = "instantiate_interface"
 
 # Docker Configuration
 DOCKER_IMAGE = "radixdlt/scrypto-builder:v1.2.0"
@@ -37,13 +39,13 @@ NETWORK_CONFIGS = {
         "network_id": 1,
         "gateway_url": "https://mainnet.radixdlt.com",
         "min_balance": 200,
-        "owner_resource": "resource_rdx1t5av9jksz5a2952qmhv5h7t2k0xt4vkv4wj7ekdchjkq435ujudss5"
+        "package_owner_badge": "resource_rdx1t529jw5nfhyf3ujrznmfqwvcj4gs30lpcgqcy5c3tvp0e6p503vlxc"
     },
     "stokenet": {
         "network_id": 2,
         "gateway_url": "https://stokenet.radixdlt.com",
         "min_balance": 100,
-        "owner_resource": "resource_tdx_2_1t40nwpv3ra5k34wy2nug6pds2mup7gszxwkgsg68mcvx550q6zmpkw"
+        "package_owner_badge": "resource_tdx_2_1t40nwpv3ra5k34wy2nug6pds2mup7gszxwkgsg68mcvx550q6zmpkw"
     }
 }
 
@@ -172,6 +174,7 @@ async def main():
         print(f"Network ID: {network_config['network_id']}")
         print(f"Gateway URL: {network_config['gateway_url']}")
         print(f"Minimum balance required: {network_config['min_balance']} XRD")
+        print(f"Package owner badge: {network_config['package_owner_badge']}")
         
         # Save the current working directory (should be the scrypto project)
         scrypto_path = Path.cwd()
@@ -271,6 +274,9 @@ async def main():
                 print("Creating new config file")
                 config_data = {}
 
+            # Store package owner badge in config for reference
+            config_data['PACKAGE_OWNER_BADGE'] = network_config['package_owner_badge']
+
             # Build with Docker
             print("\n=== Building Liquify Package ===")
             
@@ -298,7 +304,7 @@ async def main():
                 
                 # Create owner role for the package
                 owner_amount = '1'
-                owner_resource = network_config['owner_resource']
+                owner_resource = network_config['package_owner_badge']
                 owner_role = ret.OwnerRole.UPDATABLE(ret.AccessRule.require_amount(ret.Decimal(owner_amount), ret.Address(owner_resource)))
                 
                 # Read the files
@@ -440,10 +446,84 @@ async def main():
                     else:
                         print(f"✗ Failed to enable component: {status}")
 
-            # Transfer owner badges if desired
-            if 'LIQUIFY_OWNER_BADGE' in config_data:
+            # Deploy interface component if not already deployed
+            if 'LIQUIFY_INTERFACE_COMPONENT' not in config_data:
+                print("\n=== Instantiating Liquify Interface Component ===")
+                
+                manifest = f"""
+                CALL_METHOD
+                    Address("{account.as_str()}")
+                    "lock_fee"
+                    Decimal("100")
+                ;
+                CALL_FUNCTION
+                    Address("{config_data['LIQUIFY_PACKAGE']}")
+                    "{INTERFACE_BLUEPRINT_NAME}"
+                    "{INTERFACE_FUNCTION}"
+                    ;
+                CALL_METHOD
+                    Address("{account.as_str()}")
+                    "deposit_batch"
+                    Expression("ENTIRE_WORKTOP")
+                ;
+                """
+                
+                print("Submitting interface instantiation transaction...")
+                payload, intent = await gateway.build_transaction_str(manifest, public_key, private_key)
+                await gateway.submit_transaction(payload)
+                print(f"Waiting for transaction: {intent}")
+                addresses = await gateway.get_new_addresses(intent)
+                
+                interface_owner_badge = addresses[0]
+                interface_component = addresses[1]
+                config_data['LIQUIFY_INTERFACE_OWNER_BADGE'] = interface_owner_badge
+                config_data['LIQUIFY_INTERFACE_COMPONENT'] = interface_component
+                
+                print(f"LIQUIFY_INTERFACE_OWNER_BADGE: {interface_owner_badge}")
+                print(f"LIQUIFY_INTERFACE_COMPONENT: {interface_component}")
+
+            # Set interface target automatically
+            if 'LIQUIFY_INTERFACE_COMPONENT' in config_data and 'LIQUIFY_COMPONENT' in config_data:
+                print("\n=== Setting Interface Target ===")
+                print(f"Pointing interface to Liquify component: {config_data['LIQUIFY_COMPONENT']}")
+                
+                manifest = f"""
+                CALL_METHOD
+                    Address("{account.as_str()}")
+                    "lock_fee"
+                    Decimal("10")
+                ;
+                CALL_METHOD
+                    Address("{account.as_str()}")
+                    "create_proof_of_amount"
+                    Address("{config_data['LIQUIFY_INTERFACE_OWNER_BADGE']}")
+                    Decimal("1")
+                ;
+                CALL_METHOD
+                    Address("{config_data['LIQUIFY_INTERFACE_COMPONENT']}")
+                    "set_interface_target"
+                    Address("{config_data['LIQUIFY_COMPONENT']}")
+                ;
+                CALL_METHOD
+                    Address("{account.as_str()}")
+                    "deposit_batch"
+                    Expression("ENTIRE_WORKTOP")
+                ;
+                """
+                
+                payload, intent = await gateway.build_transaction_str(manifest, public_key, private_key)
+                await gateway.submit_transaction(payload)
+                status = await gateway.get_transaction_status(intent)
+                
+                if status == "CommittedSuccess":
+                    print("✓ Interface target set successfully!")
+                else:
+                    print(f"✗ Failed to set interface target: {status}")
+
+            # Transfer both owner badges if desired
+            if 'LIQUIFY_OWNER_BADGE' in config_data and 'LIQUIFY_INTERFACE_OWNER_BADGE' in config_data:
                 print("\n=== Owner Badge Transfer ===")
-                if ask_yes_no("Would you like to transfer the owner badge to another account?"):
+                if ask_yes_no("Would you like to transfer both owner badges to another account?"):
                     personal_address = input("Enter the destination account address: ").strip()
                     
                     # Validate address format
@@ -461,6 +541,12 @@ async def main():
                             Decimal("1")
                         ;
                         CALL_METHOD
+                            Address("{account.as_str()}")
+                            "withdraw"
+                            Address("{config_data['LIQUIFY_INTERFACE_OWNER_BADGE']}")
+                            Decimal("1")
+                        ;
+                        CALL_METHOD
                             Address("{personal_address}")
                             "try_deposit_batch_or_abort"
                             Expression("ENTIRE_WORKTOP")
@@ -468,13 +554,13 @@ async def main():
                         ;
                         """
                         
-                        print(f"Transferring owner badge to: {personal_address}")
+                        print(f"Transferring both owner badges to: {personal_address}")
                         payload, intent = await gateway.build_transaction_str(manifest, public_key, private_key)
                         await gateway.submit_transaction(payload)
                         status = await gateway.get_transaction_status(intent)
                         
                         if status == "CommittedSuccess":
-                            print("✓ Owner badge successfully transferred!")
+                            print("✓ Both owner badges successfully transferred!")
                         else:
                             print(f"✗ Transfer failed with status: {status}")
                     else:
@@ -489,9 +575,12 @@ async def main():
             print("\n=== Deployment Complete ===")
             print(f"Network: {network}")
             print(f"Package address: {config_data.get('LIQUIFY_PACKAGE', 'N/A')}")
+            print(f"Package owner badge: {config_data.get('PACKAGE_OWNER_BADGE', 'N/A')}")
             print(f"Component address: {config_data.get('LIQUIFY_COMPONENT', 'N/A')}")
-            print(f"Owner badge: {config_data.get('LIQUIFY_OWNER_BADGE', 'N/A')}")
+            print(f"Component owner badge: {config_data.get('LIQUIFY_OWNER_BADGE', 'N/A')}")
             print(f"Liquidity receipt: {config_data.get('LIQUIFY_LIQUIDITY_RECEIPT', 'N/A')}")
+            print(f"Interface component: {config_data.get('LIQUIFY_INTERFACE_COMPONENT', 'N/A')}")
+            print(f"Interface owner badge: {config_data.get('LIQUIFY_INTERFACE_OWNER_BADGE', 'N/A')}")
 
     except Exception as e:
         print(f"\nError during deployment: {e}")
