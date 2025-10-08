@@ -314,6 +314,7 @@ async def main():
                     definition = f.read()
                 
                 # Deploy package
+                print("Building publish transaction...")
                 payload, intent = await gateway.build_publish_transaction(
                     account,
                     code,
@@ -323,7 +324,12 @@ async def main():
                     private_key,
                 )
                 
-                await gateway.submit_transaction(payload)
+                print(f"Transaction intent hash: {intent}")
+                print("Submitting transaction...")
+                result = await gateway.submit_transaction(payload)
+                print(f"Submit result: {json.dumps(result, indent=2)}")
+                
+                print("Waiting for transaction to commit...")
                 addresses = await gateway.get_new_addresses(intent)
                 config_data['LIQUIFY_PACKAGE'] = addresses[0]
                 print(f"LIQUIFY_PACKAGE: {addresses[0]}")
@@ -446,7 +452,7 @@ async def main():
                     else:
                         print(f"✗ Failed to enable component: {status}")
 
-# Deploy interface component if not already deployed
+            # Deploy interface component if not already deployed
             if 'LIQUIFY_INTERFACE_COMPONENT' not in config_data:
                 print("\n=== Instantiating Liquify Interface Component ===")
                 
