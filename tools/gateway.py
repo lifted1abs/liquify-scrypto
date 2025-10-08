@@ -262,7 +262,7 @@ class Gateway:
         network_id = network_config['network_id']
 
         manifest: ret.TransactionManifest = (
-            ret.ManifestBuilder().account_lock_fee(account, ret.Decimal('500'))
+            ret.ManifestBuilder().account_lock_fee(account, ret.Decimal('200'))
             .package_publish_advanced(
                 owner_role=owner_role,
                 code=code,
