@@ -131,17 +131,17 @@ pub struct BuyListKey;
 
 impl BuyListKey {
     pub fn new(discount_basis_points: u16, auto_unstake: bool, position: u64, receipt_id: u32) -> u128 {
-        // Pack: discount (16 bits) | auto_unstake (16 bits) | position (64 bits) | receipt_id (32 bits) = 128 bits
+        // Pack: discount (16 bits) | position (64 bits) | auto_unstake (16 bits) | receipt_id (32 bits) = 128 bits
         let auto_unstake_flag = if auto_unstake { 1u16 } else { 0u16 };
         
         ((discount_basis_points as u128) << 112) |  // Top 16 bits
-        ((auto_unstake_flag as u128) << 96) |       // Next 16 bits  
-        ((position as u128) << 32) |                // Next 64 bits
+        ((position as u128) << 48) |                // Next 64 bits
+        ((auto_unstake_flag as u128) << 32) |       // Next 16 bits
         (receipt_id as u128)                        // Bottom 32 bits
     }
     
     pub fn extract_auto_unstake(key: u128) -> bool {
-        ((key >> 96) & 0xFFFF) == 1
+        ((key >> 32) & 0xFFFF) == 1
     }
 }
 
