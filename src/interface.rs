@@ -127,13 +127,11 @@ mod interface_module {
             (xrd_bucket, remaining_lsu.into())
         }
 
-        pub fn liquify_unstake_off_ledger(&mut self, lsu_bucket: Bucket, order_ids: Vec<u64>) -> (Bucket, Bucket) {
+        pub fn liquify_unstake_off_ledger(&mut self, lsu_bucket: Bucket, order_keys: Vec<u128>) -> (Bucket, Bucket) {
             let liquify_component: Global<Liquify> = self.active_liquify_component.unwrap().into();
             
-            // Convert u64 order IDs to u128 keys as expected by the method
-            let order_keys: Vec<u128> = order_ids.into_iter().map(|id| id as u128).collect();
-            
             let (xrd_bucket, remaining_lsu) = liquify_component.liquify_unstake_off_ledger(lsu_bucket.as_fungible(), order_keys);
+            
             (xrd_bucket, remaining_lsu.into())
         }
 

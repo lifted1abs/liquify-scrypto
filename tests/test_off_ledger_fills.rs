@@ -266,23 +266,25 @@ fn test_off_ledger_fills() {
     println!("Will test unstaking with {} keys", NUM_KEYS_TO_TEST);
     println!("======================\n");
 
-    // Create liquidity positions - all with auto_unstake=true for off-ledger test
-    let mut expected_keys: Vec<u128> = Vec::new();
-    let discount_basis_points = 10u16; // 0.0010 * 10000
+// Create liquidity positions - all with auto_unstake=true for off-ledger test
+let mut expected_keys: Vec<u128> = Vec::new();
+let discount_basis_points = 10u16; // 0.0010 * 10000
+
+for i in 0..NUM_LIQUIDITY_POSITIONS {
+    let auto_unstake = true;  // All true for off-ledger test
     
-    for i in 0..NUM_LIQUIDITY_POSITIONS {
-        let auto_unstake = true;  // All true for off-ledger test
-        
-        // Calculate the key that will be created
-        let receipt_id = (i + 1) as u32;
-        let position = (i + 1) as u64;
-        
-        let key = ((discount_basis_points as u128) << 112) |
-                  ((if auto_unstake { 1u128 } else { 0u128 }) << 96) |
-                  ((position as u128) << 32) |
-                  (receipt_id as u128);
-        
-        expected_keys.push(key);
+    // Calculate the key that will be created
+    let receipt_id = (i + 1) as u32;
+    let position = (i + 1) as u64;
+    
+    // Use the CORRECT bit layout matching BuyListKey::new()
+    let auto_unstake_flag = if auto_unstake { 1u128 } else { 0u128 };
+    let key = ((discount_basis_points as u128) << 112) |  // Top 16 bits
+              ((position as u128) << 48) |                // Next 64 bits  
+              ((auto_unstake_flag as u128) << 32) |       // Next 16 bits
+              (receipt_id as u128);                       // Bottom 32 bits
+    
+    expected_keys.push(key);
         
         let manifest = ManifestBuilder::new()
             .lock_fee_from_faucet()
