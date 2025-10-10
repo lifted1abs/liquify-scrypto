@@ -285,7 +285,7 @@ mod liquify_module {
                         "icon_url" => Url::of("https://www.liquifyxrd.app/assets/logo_white_on_black.jpg"), updatable;
                     }
                 ))
-                .divisibility(DIVISIBILITY_NONE)
+                .divisibility(3)
                 .mint_initial_supply(1)
                 .into();
 
